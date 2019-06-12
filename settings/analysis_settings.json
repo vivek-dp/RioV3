@@ -1,0 +1,8 @@
+{
+    "civil_settings": {
+        "Wall": {
+            "Length_minimum": 149,
+            "Length_maximum": 251
+        }
+    }
+}
