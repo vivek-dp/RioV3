@@ -130,28 +130,46 @@ class WallDraw
 	
 	#Use reverse for flipping the component
 	def add_wall_entity pt1, pt2, reverse=false 
+		Sketchup.active_model.entities.add_line(pt1, pt2)
+		
 		length 			= pt1.distance(pt2).mm
 		
 		wall_defn 		= create_entity length, @wall_width, WALL_HEIGHT
 		trans_vector 	= pt1.vector_to pt2
 		orig_trans 		= Geom::Transformation.new(trans_vector)
 		
+		#Reversing to make sure all the vector point towards the origin....
 		extra = 0
 		if reverse
 			extra 	=  Math::PI
-			placement_point = pt2
+			if trans_vector.y < 0
+				trans_vector.reverse! 
+				placement_point = pt1
+			else
+				placement_point = pt2
+			end
 			#trans_vector = pt2.vector_to pt1
 		else
-			placement_point = pt1
+			if trans_vector.y < 0
+				trans_vector.reverse! 
+				placement_point = pt2
+			else
+				placement_point = pt1
+			end
 		end
 		
 		angle 	= extra + X_AXIS.angle_between(trans_vector)
-		puts "angle is  : #{angle.radians} : #{placement_point}"
+		puts "angle is  : #{angle.radians} : #{placement_point} : #{trans_vector}"
 		
 		#Add instance
 		inst = Sketchup.active_model.entities.add_instance wall_defn, placement_point
 		#Rotate instance
 		inst.transform!(Geom::Transformation.rotation(placement_point, Z_AXIS, angle))
+		
+		#For development
+		color = Sketchup::Color.names[rand(140)]
+		inst.material = color
+		
 		inst
 	end
 	#------------- 	Tool Events end		---------------------------------------------------------
