@@ -1,41 +1,170 @@
-
 class WallDraw
+	WALL_WIDTH = 200.mm
+	WALL_HEIGHT = 2000.mm
+	
+	attr_accessor :wall_width
+	
+	def initialize(width=200.mm)
+		@wall_width = width
+		@user_text_entered = false
+	end
+	
 	def activate
-		puts 'Your tool has been activated.'
-		@wall_points_a = []
-		@ip1 = nil
+		puts 'WallDraw : activated.'
+		
+		@mouse_ip 			= Sketchup::InputPoint.new
+		@first_picked_point = Sketchup::InputPoint.new
+		
+		@wall_points_a 		= []
 		@color_array 		= Sketchup::Color.names
+		
+		@width 
 	end
 
 	def deactivate(view)
-		puts "Your tool has been deactivated in view: #{view}"
+		puts "WallDraw : deactivated view: #{view}"
 		@wall_points_a = nil
-		@ip1 = nil
+		@first_picked_point = nil
 		@color_array = nil
+		view.invalidate
+	end
+	
+	#-----------	Tool Events start 	-------------------------------------------------------
+	def picked_points
+        points = []
+        points << @first_picked_point.position if @first_picked_point.valid?
+        points << @mouse_ip.position if @mouse_ip.valid?
+        points
+	end
+	
+	def draw_preview(view)
+		points = picked_points
+        return unless points.size == 2
+		#puts "draw preview.... #{points}"
+        view.set_color_from_line(*points)
+        view.line_width = 10
+        view.line_stipple = "-.-"
+        view.draw(GL_LINES, points)
 	end
 	
 	def draw(view)
-		puts "draw called : #{view}"
-		view.drawing_color= Sketchup::Color.new("Orange")
-		arr = [ Geom::Point3d.new(0,0,0), Geom::Point3d.new(1000,1000,1000)]
-		view.draw(GL_LINES, arr)
+		draw_preview(view)
+		@mouse_ip.draw(view) if @mouse_ip.display?
 	end
 	
+	def enableVCB?
+		return true
+	end
+	
+	def onUserText(text, view)
+		puts "User text : #{text} : #{view}"
+		length = text.to_l
+		if @first_picked_point.valid?
+			# @mouse_ip.pick(view, x, y, @first_picked_point)
+			# puts "Posn : #{@mouse_ip.position} : #{@first_picked_point.position}"
+			# distance = @mouse_ip.position.distance @first_picked_point.position
+			# if distance > 10.mm
+				
+			# end
+			@wall_width = length
+		end
+		@user_text_entered = true
+	rescue ArgumentError
+		view.tooltop = 'Invalid length'
+	end
+	
+	
+	
+	
+	def get_current_entities
+		ent_a = []
+		Sketchup.active_model.entities.each{|ent| ent_a << ent}
+		ent_a
+	end	
+		
+	def create_entity length, width, height
+		defn_name = 'rio_temp_defn_' + Time.now.strftime("%T%m")
+
+		model		= Sketchup.active_model
+		entities 	= model.entities
+		defns		= model.definitions
+		comp_defn	= defns.add defn_name
+		
+		pt1 		= ORIGIN
+		pt2			= ORIGIN.offset(Y_AXIS, width)
+		pt3 		= pt2.offset(X_AXIS, length.to_mm)
+		pt4 		= pt1.offset(X_AXIS, length.to_mm)
+		
+		wall_temp_group 	= comp_defn.entities.add_group
+		wall_temp_face 		= wall_temp_group.entities.add_face(pt1, pt2, pt3, pt4)
+		
+		ent_list1 	= get_current_entities
+		wall_temp_face.pushpull -height
+		ent_list2 	= get_current_entities
+		
+		new_entities 	= ent_list2 - ent_list1
+		new_entities.grep(Sketchup::Face).each { |tface|
+			wall_temp_group.entities.add_face tface
+		}
+		comp_defn
+	end
+	
+	def add_wall pt1, pt2
+		#line = Sketchup.active_model.entities.add_line(pt1, pt2)
+		wall_face =	draw_face(pt1, pt2, @wall_width)
+		
+		color = @color_array[rand(140)]
+		
+		prev_entities = []; Sketchup.active_model.entities.each { |ent| prev_entities << ent }
+		wall_face.material = color
+		wall_face.back_material = color
+		wall_face.pushpull -WALL_HEIGHT
+		curr_entities = []; Sketchup.active_model.entities.each { |ent| curr_entities << ent }
+		
+		new_entities = curr_entities - prev_entities
+		
+		puts "new entities : #{new_entities}"
+		@wall_group = Sketchup.active_model.entities.add_group(new_entities)
+		@wall_group
+	end
+	
+	#Use reverse for flipping the component
+	def add_wall_entity pt1, pt2, reverse=false 
+		length 			= pt1.distance(pt2).mm
+		
+		wall_defn 		= create_entity length, @wall_width, WALL_HEIGHT
+		trans_vector 	= pt1.vector_to pt2
+		orig_trans 		= Geom::Transformation.new(trans_vector)
+		
+		extra = 0
+		if reverse
+			extra 	=  Math::PI
+			placement_point = pt2
+			#trans_vector = pt2.vector_to pt1
+		else
+			placement_point = pt1
+		end
+		
+		angle 	= extra + X_AXIS.angle_between(trans_vector)
+		puts "angle is  : #{angle.radians} : #{placement_point}"
+		
+		#Add instance
+		inst = Sketchup.active_model.entities.add_instance wall_defn, placement_point
+		#Rotate instance
+		inst.transform!(Geom::Transformation.rotation(placement_point, Z_AXIS, angle))
+		inst
+	end
+	#------------- 	Tool Events end		---------------------------------------------------------
+	
+	#------------- Mouse Events Start ----------------------------------------------------------------
 	def onLButtonUp(flags, x, y, view)
 		if @wall_points_a.size > 1
 			puts @wall_points_a
 			pt1 = @wall_points_a[0][:point]
 			pt2 = @wall_points_a[1][:point]
-			#line = Sketchup.active_model.entities.add_line(pt1, pt2)
-			wall_face =	draw_face(pt1, pt2)
-			
-			wall_height = 1000.mm
-			color = @color_array[rand(140)]
-			wall_face.material = color
-			wall_face.back_material = color
-			wall_face.pushpull -wall_height
-			
-			#line.find_faces
+			#new_wall = add_wall pt1, pt2
+			new_wall = add_wall_entity pt1, pt2
+			@user_text_entered = false
 		end
 		puts "onLButtonUp"
 		view.refresh # calls getExtents() then draw() method
@@ -48,9 +177,9 @@ class WallDraw
 		entity = ph.best_picked
 		
 		
-		@ip1 = Sketchup::InputPoint.new unless @ip1
-		@ip1.pick view, x, y
-		puts "Point clicked : #{@ip1.position}"
+		@first_picked_point = Sketchup::InputPoint.new unless @first_picked_point
+		@first_picked_point.pick view, x, y
+		puts "Point clicked : #{@first_picked_point.position}"
 		
 		#point = p
 		pick_h = {
@@ -58,7 +187,7 @@ class WallDraw
 			:x 		=> x,
 			:y 		=> y,
 			:view 	=> view,
-			:point	=> @ip1.position,
+			:point	=> @first_picked_point.position,
 		}
 		
 		@wall_points_a.shift if @wall_points_a.size > 1
@@ -66,7 +195,30 @@ class WallDraw
 		puts "Entity picked : #{entity}"
 	end
 	
-	def draw_face pt1, pt2, wall_offset=100.mm
+	def onMouseMove(flags, x, y, view)
+		if @first_picked_point.valid?
+			@mouse_ip.pick(view, x, y, @first_picked_point)
+			distance = @mouse_ip.position.distance @first_picked_point.position
+			Sketchup.vcb_value = distance
+			#puts "distance : #{distance}"
+		else
+			@mouse_ip.pick(view, x, y)
+		end
+		if @mouse_ip.valid?
+			#puts "Tool tip : #{@mouse_ip.tooltip}"
+			view.tooltip = @mouse_ip.tooltip 			
+		end
+		view.invalidate
+	end
+	
+	# def onMouseMove(flags, x, y, view)
+		# @mm.pick view, x, y
+		# puts "onMouseMove : #{@mm.position}"
+	# end
+	#------------- Mouse Events End ----------------------------------------------------------------
+	
+	#------------- Other functions -----------------------------------------------------------------
+	def draw_face pt1, pt2, wall_offset=200.mm
 		lv	=	pt1.vector_to(pt2) #Line vector
 		perp_vector 	= Geom::Vector3d.new(lv.y, -lv.x, lv.z)
 		perp_2d_vector_a	= [perp_vector, perp_vector.reverse] #Perpendicular 2d vectors
@@ -88,10 +240,13 @@ class WallDraw
 		wall_face
 	end
 	
-	# def onMouseMove(flags, x, y, view)
-		# @mm.pick view, x, y
-		# puts "onMouseMove : #{@mm.position}"
-	# end
+	def update_status
+		if @first_picked_point.valid?
+			Sketchup.status_text = "Select Wall End."
+		else
+			Sketchup.status_text = "Select Wall Start."
+		end
+	end
 end
 
 # load 'E:\V3\Working\testing\wall_draw_tool.rb';wd=WallDraw.new;Sketchup.active_model.select_tool(wd)
