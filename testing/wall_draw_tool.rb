@@ -111,6 +111,9 @@ class WallDraw
 	
 	def add_wall pt1, pt2
 		#line = Sketchup.active_model.entities.add_line(pt1, pt2)
+		pt1 = pt1.position if pt1.is_a?(Sketchup::Vertex)
+		pt2 = pt2.position if pt2.is_a?(Sketchup::Vertex)
+		
 		wall_face =	draw_face(pt1, pt2, @wall_width)
 		
 		color = @color_array[rand(140)]
@@ -129,12 +132,15 @@ class WallDraw
 	end
 	
 	#Use reverse for flipping the component
-	def add_wall_entity pt1, pt2, type='normal'
+	def add_wall_entity pt1, pt2, wall_width=200.mm, type='normal'
+		pt1 = pt1.position if pt1.is_a?(Sketchup::Vertex)
+		pt2 = pt2.position if pt2.is_a?(Sketchup::Vertex)
+		
 		new_line = Sketchup.active_model.entities.add_line(pt1, pt2)
 		
 		length 			= pt1.distance(pt2).mm
 		
-		wall_defn 		= create_entity length, @wall_width, WALL_HEIGHT
+		wall_defn 		= create_entity length, wall_width, WALL_HEIGHT
 		trans_vector 	= pt1.vector_to pt2
 		orig_trans 		= Geom::Transformation.new(trans_vector)
 		
@@ -169,18 +175,22 @@ class WallDraw
 		
 		#For center
 		if type == 'center'
-			offset_vector 	= inst.bounds.center.vector_to new_line.bounds.center
-			trans 			= Geom::Transformation.new(Geom::Point3d.new(offset_vector.x, offset_vector.y, 0))
+			offset_vector 	= inst.bounds.center.vector_to(new_line.bounds.center)
+			compz			= inst.transformation.origin.z
+			trans_pt 		= Geom::Point3d.new(offset_vector.x, offset_vector.y, compz)
+			trans 			= Geom::Transformation.new(trans_pt)
 			inst.transform!(trans)
 		end
-
 		
 		#For development
 		color = Sketchup::Color.names[rand(140)]
 		inst.material = color
-		
-		
 		inst
+	end
+	
+	def add_wall_entity_eface edge, face, wall_width=50.mm
+		wall_defn 		= create_entity edge.length, wall_width, WALL_HEIGHT
+		
 	end
 	#------------- 	Tool Events end		---------------------------------------------------------
 	
