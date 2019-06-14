@@ -32,6 +32,11 @@ def fpid
 	return fsel.persistent_id
 end
 
+def get_comp_pid id
+	Sketchup.active_model.entities.each{|x| return x if x.persistent_id == id};
+	return nil;
+end
+
 def es
 	Sketchup.active_model.entities
 end
