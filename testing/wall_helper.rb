@@ -218,6 +218,7 @@ def create_room room_face
 end
 
 
+
 def create_wall_instance( pt1, pt2, 
 						wall_width: 50.mm, 
 						wall_height: 2000.mm, 
@@ -335,6 +336,36 @@ def create_door door_edge, room_face, door_height, wall_height
 	
 	door_block_height = wall_height - door_height
 	create_wall_instance(pt2, pt1, wall_width: entity_width, wall_height: door_block_height,at_height: door_height)
+	
+	add_real_door = true
+	if add_real_door
+		puts "add_real_door"
+		door_skp = RIO_ROOT_PATH+'/assets/samples/Door.skp'
+		door_defn = Sketchup.active_model.definitions.load(door_skp)
+		
+		inst 		= Sketchup.active_model.entities.add_instance door_defn, ORIGIN
+		door_bbox 	= inst.bounds
+		
+		x_factor 	= door_edge.length / door_bbox.width
+		y_factor 	= entity_width / door_bbox.height 
+		z_factor	= door_height / door_bbox.depth 
+		
+		puts "factors : #{x_factor} : #{y_factor} : #{z_factor}"
+		inst.transform!(Geom::Transformation.scaling(x_factor, y_factor, z_factor))
+		
+		
+		inst.transform!(Geom::Transformation.new(pt2))
+		extra = 0
+		#Rotate instance
+		trans_vector = pt2.vector_to(pt1)
+		if trans_vector.y < 0
+			trans_vector.reverse! 
+			extra = Math::PI
+		end
+		angle 	= extra + X_AXIS.angle_between(trans_vector)
+		puts "door angle : #{angle} : #{trans_vector}"
+		inst.transform!(Geom::Transformation.rotation(pt2, Z_AXIS, angle))
+	end
 end
 
 
@@ -363,8 +394,41 @@ def create_window window_edge, room_face, window_height, window_offset, wall_hei
 	create_wall_instance(pt1, pt2, wall_height: window_offset)
 	create_wall_instance(pt1, pt2, wall_height: top_wall_block_height, at_height: top_wall_at_height)
 	
+		
+	add_real_window = true
+	if add_real_window
+		puts "add_real_door"
+		window_skp = RIO_ROOT_PATH+'/assets/samples/Window.skp'
+		window_defn = Sketchup.active_model.definitions.load(window_skp)
+		
+		inst 		= Sketchup.active_model.entities.add_instance window_defn, ORIGIN
+		window_bbox 	= inst.bounds
+		
+		x_factor 	= window_edge.length / window_bbox.width
+		y_factor 	= 50.mm / window_bbox.height 
+		z_factor	= window_height / window_bbox.depth 
+		
+		puts "factors : #{x_factor} : #{y_factor} : #{z_factor}"
+		inst.transform!(Geom::Transformation.scaling(x_factor, y_factor, z_factor))
+		
+		wpt1, wpt2 = pt1, pt2
+		wpt1.z	=	window_offset
+		wpt2.z 	= 	window_offset
+		inst.transform!(Geom::Transformation.new(wpt2))
+		extra = 0
+		#Rotate instance
+		trans_vector = wpt2.vector_to(wpt1)
+		if trans_vector.y < 0
+			trans_vector.reverse! 
+			extra = Math::PI
+		end
+		angle 	= extra + X_AXIS.angle_between(trans_vector)
+		puts "Window angle : #{angle} : #{trans_vector}"
+		inst.transform!(Geom::Transformation.rotation(wpt2, Z_AXIS, angle))
+	end
+	
 	#Check if the window is an external window
-	create_external_window = true
+	create_external_window = false
 	if create_external_window
 		window_face 	= window_edge.faces
 		window_face.delete room_face
@@ -392,6 +456,7 @@ def create_window window_edge, room_face, window_height, window_offset, wall_hei
 			puts "Window is not a proper external window"
 		end
 	end
+
 end
 
 def find_adj_window_face arr=[]
@@ -421,3 +486,35 @@ end
 def create_column 
 
 end
+
+def add_real_wall door_edge, room_face
+	verts = door_edge.vertices
+	clockwise = check_clockwise_edge door_edge, room_face
+	if clockwise
+		pt1, pt2 = verts[1].position, verts[0].position
+	else
+		pt1, pt2 = verts[0].position, verts[1].position
+	end
+
+	extra = 0
+	#Rotate instance
+	trans_vector = pt1.vector_to(pt2)
+	if trans_vector.y < 0
+		trans_vector.reverse! 
+		extra = Math::PI
+	end
+	angle 	= extra + X_AXIS.angle_between(trans_vector)
+	inst.transform!(Geom::Transformation.rotation(pt1, Z_AXIS, angle))
+end
+
+def scale_component component_instance
+	absolute_scale = [80, 70, 60]
+	bounds = component_instance.bounds
+	scale_factors = [bounds.width, bounds.height, bounds.depth].zip(absolute_scale).map{ |old, new| new / old }
+	scale_transformation = Geom::Transformation.scaling(*scale_factors)
+	component_instance.transform!(scale_transformation)
+end
+
+
+#fsel.transform!(Geom::Transformation.scaling(0.1,1,0.8))
+
