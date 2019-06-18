@@ -27,7 +27,6 @@ def check_room_outer_edges input_face
     end
 end
 
-
 def get_comp_pid id
 	Sketchup.active_model.entities.each{|x| return x if x.persistent_id == id};
 	return nil;
@@ -50,7 +49,7 @@ def add_wall_corner_lines
 	
 	wall_layer = Sketchup.active_model.layers['RIO_Wall']
 	
-	puts "wall_faces : #{wall_faces}"
+	#puts "wall_faces : #{wall_faces}"
 	if false
 		wall_faces.each {|face|
 			face.edges.each{ |edge|
@@ -58,18 +57,18 @@ def add_wall_corner_lines
 				verts.each{ |vert|
 					other_vert = verts - [vert]
 					other_vert = other_vert[0]
-					puts "vert : #{vert} : #{other_vert} : #{verts}"
+					#puts "vert : #{vert} : #{other_vert} : #{verts}"
 					
 					vector 	= vert.position.vector_to(other_vert).reverse
 					pt 		= vert.position.offset vector, 10.mm
 					res 	= face.classify_point(pt)
-					puts "res : #{res} : #{edge} "
+					#puts "res : #{res} : #{edge} "
 					if res == Sketchup::Face::PointInside || res == Sketchup::Face::PointOnFace
 						ray = [vert.position, vector]
 						hit_item 	= model.raytest(ray, false)
 						puts hit_item, hit_item[1][0].layer
 						if hit_item[1][0].layer.name == 'RIO_Wall'
-							puts "Wall..."
+							#puts "Wall..."
 							pts << [vert.position, hit_item[0]]
 						end
 					end
@@ -187,14 +186,14 @@ def check_clockwise_edge edge, face
 	
 	clockwise = dot_vector.z > 0
 	if clockwise
-		puts "Clockwise"
+		#puts "Clockwise"
 	else
-		puts "Anti clockwise"
+		#puts "Anti clockwise"
 	end
 	return clockwise
 end
 
-def create_room room_face
+def create_room room_face, room_name='room_1'
 	return "No value sent" unless room_face
 	return "Please select a face" unless room_face.is_a?(Sketchup::Face) 
 	
@@ -216,20 +215,31 @@ def create_room room_face
 		end
 		
 		wall_inst = create_wall_instance(pt1, pt2, wall_height: wall_height)
+		wall_inst.set_attribute(:rio_block_atts, 'wall_block', 'true')
+		wall_inst.set_attribute(:rio_block_atts, 'start_point', pt1)
+		wall_inst.set_attribute(:rio_block_atts, 'end_point', pt2)
+		wall_inst.set_attribute(:rio_block_atts, 'wall_height', wall_height)
+		wall_inst.set_attribute(:rio_block_atts, 'room_name', room_name)
 	}
 	puts "Room Walls created..."
 	
+	#------------------------------------------
 	room_face.edges.select{|e| e.layer.name == 'RIO_Door'}.each{ |door_edge|
 		puts "Door : #{door_edge}"
 		create_door door_edge, room_face, door_height, wall_height
 	}
 	puts "Room Doors created"
 	
+	#------------------------------------------
 	room_face.edges.select{|e| e.layer.name == 'RIO_Window'}.each{ |window_edge|
 		puts "Window : #{window_edge}"
 		create_window window_edge, room_face, window_height, window_offset, wall_height
 	}
 	puts "Room Windows created"
+	
+	#------------------------------------------
+	create_columns room_face
+	puts "Columns created"
 end
 
 def create_wall_instance( start_point, end_point, 
@@ -240,7 +250,7 @@ def create_wall_instance( start_point, end_point,
 	start_point = start_point.position if start_point.is_a?(Sketchup::Vertex)
 	end_point = end_point.position if end_point.is_a?(Sketchup::Vertex)
 	
-	puts "create_wall_instance params : #{method(__method__).parameters}"
+	#puts "create_wall_instance params : #{method(__method__).parameters}"
 
 	length 			= start_point.distance(end_point).mm
 	
@@ -303,6 +313,8 @@ def create_entity length, width, height
 end
 
 def create_door door_edge, room_face, door_height, wall_height
+
+
 	room_edges 		= room_face.edges
 	adjacent_edges 	= []
 	
@@ -313,10 +325,10 @@ def create_door door_edge, room_face, door_height, wall_height
 	
 	#Find the adjacent perpendicular edges...90 degrees not 180,270
 	room_edges.each{|redge|
-		puts "redge : #{redge}"
+		#puts "redge : #{redge}"
 		unless (redge.vertices&door_edge.vertices).empty?
 			angle = door_edge.line[1].angle_between redge.line[1]
-			puts "angle : #{angle}"
+			#puts "angle : #{angle}"
 			adjacent_edges << redge if(angle.ceil(2)==(Math::PI/2).ceil(2))
 		end
 	}
@@ -331,6 +343,9 @@ def create_door door_edge, room_face, door_height, wall_height
 	if adjacent_edges.empty? 
 		puts "Door Wall Error : Perpendicular edges are longer than 251mm"
 		return
+	else
+		puts "adjacent_edges : #{adjacent_edges}"
+		adjacent_edges.each{|adj_edge| adj_edge.set_attribute(:rio_atts, 'door_adjacent', door_edge.persistent_id)}
 	end
 	
 	#Sort the length...descending 
@@ -379,6 +394,8 @@ def create_door door_edge, room_face, door_height, wall_height
 		inst.transform!(Geom::Transformation.rotation(pt2, Z_AXIS, angle))
 	end
 end
+
+
 
 def create_window window_edge, room_face, window_height, window_offset, wall_height
 	room_edges = room_face.edges
@@ -493,7 +510,8 @@ def delete_blocks
 	Sketchup.active_model.entities.erase_entities block_ents
 end
 
-def create_column 
+def get_room_blocks room_face
+
 end
 
 def add_real_wall door_edge, room_face
@@ -525,13 +543,10 @@ def scale_component component_instance
 end
 
 
-#fsel.transform!(Geom::Transformation.scaling(0.1,1,0.8))
-
-
-
-def check_columns
-    input_face = fsel
-
+def create_columns input_face
+    #input_face = fsel
+	puts "Input face : #{input_face}"
+	
     face_edges = input_face.edges
     wall_layers = ['RIO_Wall', 'RIO_Window', 'RIO_Door']
     face_edges.length.times do
@@ -566,7 +581,7 @@ def check_columns
             column_edge_arr.each { |column_edge|
                 adjacent_edges << find_edges(column_edge, input_face)
             }
-			puts "adj : #{adjacent_edges}"
+			#puts "adj : #{adjacent_edges}"
 			adjacent_edges.flatten!; adjacent_edges.uniq!
 			
 			intersect_pt = Geom.intersect_line_line(adjacent_edges[0].line, adjacent_edges[1].line)
@@ -650,9 +665,10 @@ def check_columns
         
 		prev_ents = [];Sketchup.active_model.entities.each{|ent| prev_ents << ent}
         wall_height = -3000.mm
-		if input_face.normal.z > 0
-			wall_height = -wall_height
-		end
+		# if input_face.normal.z < 0
+			# wall_height = -wall_height
+		# end
+		column_face.reverse! if column_face.normal.z > 0
 		column_face.pushpull(wall_height, true)
         curr_ents = [];Sketchup.active_model.entities.each{|ent| curr_ents << ent}
         new_ents = curr_ents - prev_ents
@@ -663,7 +679,7 @@ end
 def find_edges sel_edge, sel_face
     edge_arr = []
     sel_edge.vertices.each{|ver|
-        puts ver.edges&sel_face.edges
+        #puts ver.edges&sel_face.edges
         common_edges = ver.edges&sel_face.edges
         edge_arr << common_edges
     }
@@ -671,6 +687,98 @@ def find_edges sel_edge, sel_face
     edges = edge_arr.flatten!.uniq! - [sel_edge]
 	edges.select!{|ed| ed.layer.name!='RIO_Column'}
 	edges
+end
+
+def create_beam input_face
+	face_center = input_face.bounds.center
+	
+end
+
+
+def get_views room_face
+	unless room_face.is_a?(Sketchup::Face)
+		puts "get_views : Not a Sketchup Face"
+		return false
+	end
+
+	unknown_edges = []
+	room_face.edges.each{ |redge| unknown_edges << redge unless redge.layer.name.start_with?('RIO_')}
+	unless unknown_edges.empty?
+		seln = Sketchup.active_model.selection; seln.clear; seln.add(unknown_edges)
+		puts "The following are unknown edges in the floor."
+		return false
+	end
+	
+	# ----------------------------------------------------------------
+    # get corner edge
+    corner_found = false
+	floor_edges_arr = room_face.outer_loop.edges
+	floor_edges_arr.length.times do
+        f_edge = floor_edges_arr[0]
+        puts "f_edge : #{f_edge.layer.name} : #{floor_edges_arr[1].layer.name}"
+        #Corner algo 1 : Check for perpendicular walls
+        if f_edge.layer.name == 'RIO_Wall'
+			next_edge = floor_edges_arr[1]
+            if next_edge.layer.name == 'RIO_Wall'
+                if f_edge.line[1].perpendicular?(next_edge.line[1]) || f_edge.line[1].perpendicular?(next_edge.line[1].reverse)
+                    corner_found = true
+                    #sel.add(f_edge, next_edge)
+                end
+            end
+		end
+        puts "corner_found : #{corner_found}"
+        floor_edges_arr.rotate!
+        break if corner_found
+	end
+	floor_edges_arr.rotate!
+	
+	room_views = []
+	#parse each edge
+	while_count = 0
+	while while_count < 20
+		while_count += 1
+		view_comps 	= get_wall_view(floor_edges_arr)
+		floor_edges_arr = floor_edges_arr - view_comps		
+		room_views << view_comps
+		floor_edges_arr.flatten!
+		break if floor_edges_arr.empty?
+	end
+	sel.add(floor_edges_arr)
+	puts "room : floor_edges_arr : #{floor_edges_arr}"
+	room_views
+end
+
+def get_wall_view floor_edge_arr
+	last_viewed_wall = nil
+	view_components = []
+	floor_edge_arr.each {|floor_edge|
+		case floor_edge.layer.name 
+		when 'RIO_Wall'
+			if last_viewed_wall
+				if floor_edge.get_attribute(:rio_atts, 'door_adjacent')
+					view_components << floor_edge
+				else
+					if floor_edge.line[1].perpendicular?(last_viewed_wall.line[1])
+						return view_components
+					else
+						view_components << floor_edge
+					end
+				end
+			else
+				last_viewed_wall = floor_edge 
+				view_components << floor_edge
+			end
+		when 'RIO_Door', 'RIO_Window'
+			if floor_edge.line[1].perpendicular?(last_viewed_wall.line[1])
+				return view_components
+			else
+				view_components << floor_edge
+			end
+		when 'RIO_Column'
+			view_components << floor_edge
+		end
+	}
+	return view_components
 end
 
 
