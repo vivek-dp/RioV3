@@ -119,7 +119,7 @@ def add_wall_corner_lines
 
 				ray = [start_pt, ray_vector]
 				hit_item = Sketchup.active_model.raytest(ray, false)
-				#puts "hit_item : #{hit_item}"
+				puts "hit_item : #{hit_item}"
 
 				if hit_item && hit_item[1][0].is_a?(Sketchup::Edge)
 					if hit_item[1][0].layer.name == 'RIO_Wall'
@@ -706,7 +706,7 @@ def create_beam input_face
 		if distance > 60.mm
 			if ray_res[1][0].get_attribute(:rio_atts,'wall_block')
 				puts "ray res : #{ray_res} : #{ray_res[1][0].get_attribute(:rio_atts,'wall_block')}"
-				input_face.pushpull(distance, fnorm)
+				input_face.pushpull(distance, true)
 			end
 		end
 	end
@@ -716,7 +716,7 @@ def create_beam input_face
 		if distance > 60.mm
 			if ray_res[1][0].get_attribute(:rio_atts,'wall_block')
 				puts "Rev ray res : #{ray_res} : #{ray_res[1][0].get_attribute(:rio_atts,'wall_block')}"
-				input_face.pushpull(distance, fnorm.reverse)
+				input_face.pushpull(distance, true)
 			end
 		end
 	end
@@ -747,19 +747,24 @@ def get_views room_face
         #Corner algo 1 : Check for perpendicular walls
         if f_edge.layer.name == 'RIO_Wall'
 			next_edge = floor_edges_arr[1]
-            if next_edge.layer.name == 'RIO_Wall'
-                if f_edge.line[1].perpendicular?(next_edge.line[1]) || f_edge.line[1].perpendicular?(next_edge.line[1].reverse)
-                    corner_found = true
-                    #sel.add(f_edge, next_edge)
-                end
-            end
+			if f_edge.get_attribute(:rio_atts, 'door_adjacent') || next_edge.get_attribute(:rio_atts, 'door_adjacent')
+				#If the current or next wall is a door adjacent wall.....Skip.....
+			else
+				if next_edge.layer.name == 'RIO_Wall'
+					if f_edge.line[1].perpendicular?(next_edge.line[1]) || f_edge.line[1].perpendicular?(next_edge.line[1].reverse)
+						corner_found = true
+						#sel.add(f_edge, next_edge)
+					end
+				end
+			end
 		end
         puts "corner_found : #{corner_found}"
         floor_edges_arr.rotate!
         break if corner_found
 	end
-	floor_edges_arr.rotate!
+	#floor_edges_arr.rotate!
 	
+	puts "get_views : #{floor_edges_arr}"
 	room_views = []
 	#parse each edge
 	while_count = 0
@@ -779,6 +784,7 @@ end
 def get_wall_view floor_edge_arr
 	last_viewed_wall = nil
 	view_components = []
+	puts "floor_edge_arr : #{floor_edge_arr}"
 	floor_edge_arr.each {|floor_edge|
 		case floor_edge.layer.name 
 		when 'RIO_Wall'
@@ -793,11 +799,11 @@ def get_wall_view floor_edge_arr
 					end
 				end
 			else
-				last_viewed_wall = floor_edge 
+				last_viewed_wall = floor_edge unless floor_edge.get_attribute(:rio_atts, 'door_adjacent')
 				view_components << floor_edge
 			end
 		when 'RIO_Door', 'RIO_Window'
-			if floor_edge.line[1].perpendicular?(last_viewed_wall.line[1])
+			if last_viewed_wall && floor_edge.line[1].perpendicular?(last_viewed_wall.line[1])
 				return view_components
 			else
 				view_components << floor_edge

@@ -149,6 +149,7 @@ module RIO
         class Door < CivilComponent
 
         end
+
         class Window < CivilComponent
 
         end
