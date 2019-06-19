@@ -278,6 +278,7 @@ def create_wall_instance( start_point, end_point,
 	color = Sketchup::Color.names[rand(140)]
 	inst.material = color
 	
+	inst.set_attribute :rio_atts, 'wall_block', 'true'
 	inst
 end
 
@@ -691,7 +692,34 @@ end
 
 def create_beam input_face
 	face_center = input_face.bounds.center
+	fnorm 		= input_face.normal
 	
+	ray_res 		= Sketchup.active_model.raytest(face_center, fnorm)
+	reverse_ray_res = Sketchup.active_model.raytest(face_center, fnorm.reverse)
+	
+	puts "ray_res : #{ray_res}"
+	puts "revsrese ray : #{reverse_ray_res}"
+	
+	if ray_res
+		distance = ray_res[0].distance(face_center)
+		puts "ray distance : #{distance}"
+		if distance > 60.mm
+			if ray_res[1][0].get_attribute(:rio_atts,'wall_block')
+				puts "ray res : #{ray_res} : #{ray_res[1][0].get_attribute(:rio_atts,'wall_block')}"
+				input_face.pushpull(distance, fnorm)
+			end
+		end
+	end
+	if reverse_ray_res
+		distance = reverse_ray_res[0].distance(face_center)
+		puts "revesre ray distance : #{distance}"
+		if distance > 60.mm
+			if ray_res[1][0].get_attribute(:rio_atts,'wall_block')
+				puts "Rev ray res : #{ray_res} : #{ray_res[1][0].get_attribute(:rio_atts,'wall_block')}"
+				input_face.pushpull(distance, fnorm.reverse)
+			end
+		end
+	end
 end
 
 
