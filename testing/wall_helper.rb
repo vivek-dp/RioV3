@@ -107,7 +107,7 @@ def add_wall_corner_lines
 					if hit_item[1][0].layer.name == 'RIO_Wall'
 						distance = first_vert.position.distance hit_item[0]
 						#puts distance
-						if distance < 250.mm
+						if distance < 251.mm
 							wall_line = Sketchup.active_model.entities.add_line first_vert.position, hit_item[0]
 							wall_line.layer = wall_layer
 						end
@@ -125,7 +125,7 @@ def add_wall_corner_lines
 					if hit_item[1][0].layer.name == 'RIO_Wall'
 						distance = second_vert.position.distance hit_item[0]
 						#puts distance
-						if distance < 250.mm
+						if distance < 251.mm
 							#puts "Draw line......."
 							wall_line = Sketchup.active_model.entities.add_line second_vert.position, hit_item[0]
 							wall_line.layer = wall_layer
@@ -204,15 +204,17 @@ def create_room room_face, room_name='room_1'
 	door_height		= 2000.mm
 	
 	room_wall_edges = room_face.edges.select{|edge| edge.layer.name == 'RIO_Wall'} 
-	room_wall_edges.select{|e| e.layer.name == 'RIO_Wall'}.each{ |edge|
-		verts = edge.vertices
+	room_wall_edges.select{|e| e.layer.name == 'RIO_Wall'}.each{ |wall_edge|
+		verts = wall_edge.vertices
 		
-		clockwise = check_clockwise_edge edge, room_face
+		clockwise = check_clockwise_edge wall_edge, room_face
 		if clockwise
 			pt1, pt2 = verts[0].position, verts[1].position
 		else
 			pt1, pt2 = verts[1].position, verts[0].position
 		end
+		
+		towards_wall_vector = check_edge_vector wall_edge, room_face
 		
 		wall_inst = create_wall_instance(pt1, pt2, wall_height: wall_height)
 		wall_inst.set_attribute(:rio_block_atts, 'wall_block', 'true')
@@ -220,6 +222,7 @@ def create_room room_face, room_name='room_1'
 		wall_inst.set_attribute(:rio_block_atts, 'end_point', pt2)
 		wall_inst.set_attribute(:rio_block_atts, 'wall_height', wall_height)
 		wall_inst.set_attribute(:rio_block_atts, 'room_name', room_name)
+		wall_inst.set_attribute(:rio_block_atts, 'towards_wall_vector', towards_wall_vector) #Will used for beam
 	}
 	puts "Room Walls created..."
 	
@@ -547,134 +550,178 @@ end
 def create_columns input_face
     #input_face = fsel
 	puts "Input face : #{input_face}"
+	wall_height = -3000.mm
 	
-    face_edges = input_face.edges
-    wall_layers = ['RIO_Wall', 'RIO_Window', 'RIO_Door']
-    face_edges.length.times do
-        f_edge = face_edges[0]
-        break if f_edge.layer.name != 'RIO_Column'
-        face_edges.rotate!
-    end
+	Sketchup.active_model.layers.add('RIO_Civil_Column') if Sketchup.active_model.layers['RIO_Civil_Column'].nil?
+	
+	#Working on the outer loop of the floor....
+	outer_loop_flag = true
+	if outer_loop_flag
+		face_edges = input_face.outer_loop.edges
+		wall_layers = ['RIO_Wall', 'RIO_Window', 'RIO_Door']
+		face_edges.length.times do
+			f_edge = face_edges[0]
+			break if f_edge.layer.name != 'RIO_Column'
+			face_edges.rotate!
+		end
 
-    columns = []
-    column_edges = []
-    face_edges.each{ |f_edge|
-        if f_edge.layer.name == 'RIO_Column'
-            column_edges << f_edge
-        else 
-            columns << column_edges unless column_edges.empty?
-            column_edges = []
-        end
-    }
-
-    columns.each { |column_edge_arr|
-		intersect_pt = nil
-        case column_edge_arr.length
-        when 1 
-			#Corner column with only one edge visible 
-            column_edge = column_edge_arr[0]
-            adjacent_edges = find_edges(column_edge_arr[0], input_face)
-            intersect_pt = Geom.intersect_line_line(adjacent_edges[0].line, adjacent_edges[1].line)
-			col_verts = column_edge.vertices
-			column_face = Sketchup.active_model.entities.add_face(col_verts[0], col_verts[1], intersect_pt)
-		when 2
-			adjacent_edges = []
-            column_edge_arr.each { |column_edge|
-                adjacent_edges << find_edges(column_edge, input_face)
-            }
-			#puts "adj : #{adjacent_edges}"
-			adjacent_edges.flatten!; adjacent_edges.uniq!
-			
-			intersect_pt = Geom.intersect_line_line(adjacent_edges[0].line, adjacent_edges[1].line)
-			
-			vert_a = []
-			vert_a << column_edge_arr[1].vertices - column_edge_arr[0].vertices
-			vert_a << column_edge_arr[0].vertices
-			vert_a.flatten!; vert_a.uniq!
-			
-			pts_a = []; vert_a.each{|pt| pts_a << pt.position}
-			pts_a << intersect_pt; pts_a.flatten!; pts_a.uniq!
-			
-			column_face = Sketchup.active_model.entities.add_face(pts_a)
-		when 3
-			#This code has been written because the array of edges are not regular....They are not sorted sometimes.
-			
-			#Find the center edge
-			center_index = 0 if (column_edge_arr[1].vertices&column_edge_arr[2].vertices).empty?
-            center_index = 1 if (column_edge_arr[0].vertices&column_edge_arr[2].vertices).empty?
-            center_index = 2 if (column_edge_arr[0].vertices&column_edge_arr[1].vertices).empty?
-            arr = [0, 1, 2] - [center_index]
-            center_edge = column_edge_arr[center_index]
-            
-			#Find the common vertex of side edges
-			first_common_vertex = column_edge_arr[arr[0]].vertices&center_edge.vertices
-            last_common_vertex  = column_edge_arr[arr[1]].vertices&center_edge.vertices
-            
-			#FInd the face points
-            vert1 = column_edge_arr[arr[0]].vertices - [first_common_vertex[0]];vert1 = vert1[0].position
-            vert2 = first_common_vertex.first.position
-            vert3 = last_common_vertex.first.position
-            vert4 = column_edge_arr[arr[1]].vertices - [last_common_vertex[0]];vert4 = vert4[0].position
-            
-			column_face = Sketchup.active_model.entities.add_face(vert1, vert2, vert3, vert4)
-        when 4
-			#Other columns
-            adjacent_edges = []
-            column_edge_arr.each { |column_edge|
-                adjacent_edges << find_edges(column_edge, input_face)
-            }
-			
-			if adjacent_edges
-				adjacent_edges.flatten!; adjacent_edges.uniq!
-				if adjacent_edges.length == 2
-					intersect_pt = Geom.intersect_line_line(adjacent_edges[0].line, adjacent_edges[1].line)
-					adjacent_edges.each { |adj_edge| 
-						common_vertex=nil
-						column_edge_arr.each { |col_edge|
-							common_vertex = (col_edge.vertices&adj_edge.vertices)[0]
-							if common_vertex
-								Sketchup.active_model.entities.add_line(intersect_pt, common_vertex.position)
-								break
-							end
-						}
-					}
-					faces = column_edge_arr[0].faces
-					column_edge_arr.each {|column_edge|
-						faces = faces&(column_edge.faces-[input_face])						
-					}
-					column_face = faces[0]
-				else
-					puts "4 : Something wrong with the adjacent edges"
-				end
+		columns = []
+		column_edges = []
+		face_edges.each{ |f_edge|
+			if f_edge.layer.name == 'RIO_Column'
+				column_edges << f_edge
+			else 
+				columns << column_edges unless column_edges.empty?
+				column_edges = []
 			end
-			
-        else
-            puts "Column edges more than 4 not supported."
-        end
-
-        # face_pts = []
-        # column_edge_arr.each_with_index {|col, col_index| 
-			# face_pts <<[col.vertices[0], col.vertices[1]] if col_index==0
-			# face_pts <<[col.vertices[1], col.vertices[1]] if col_index==1
-		# }
-        # face_pts << intersect_pt if intersect_pt
-        # face_pts.flatten!.uniq!
+		}
 		
-		# puts "face_pts : #{face_pts}"
+		
+		columns.each { |column_edge_arr|
+			intersect_pt 	= nil
+			column_face		= nil
+			
+			case column_edge_arr.length
+			when 1 
+				#Corner column with only one edge visible 
+				column_edge = column_edge_arr[0]
+				adjacent_edges = find_edges(column_edge_arr[0], input_face)
+				intersect_pt = Geom.intersect_line_line(adjacent_edges[0].line, adjacent_edges[1].line)
+				col_verts = column_edge.vertices
+				column_face = Sketchup.active_model.entities.add_face(col_verts[0], col_verts[1], intersect_pt)
+			when 2
+				adjacent_edges = []
+				column_edge_arr.each { |column_edge|
+					adjacent_edges << find_edges(column_edge, input_face)
+				}
+				#puts "adj : #{adjacent_edges}"
+				adjacent_edges.flatten!; adjacent_edges.uniq!
+				
+				intersect_pt = Geom.intersect_line_line(adjacent_edges[0].line, adjacent_edges[1].line)
+				
+				vert_a = []
+				vert_a << column_edge_arr[1].vertices - column_edge_arr[0].vertices
+				vert_a << column_edge_arr[0].vertices
+				vert_a.flatten!; vert_a.uniq!
+				
+				pts_a = []; vert_a.each{|pt| pts_a << pt.position}
+				pts_a << intersect_pt; pts_a.flatten!; pts_a.uniq!
+				
+				column_face = Sketchup.active_model.entities.add_face(pts_a)
+			when 3
+				#This code has been written because the array of edges are not regular....They are not sorted sometimes.
+				
+				#Find the center edge
+				center_index = 0 if (column_edge_arr[1].vertices&column_edge_arr[2].vertices).empty?
+				center_index = 1 if (column_edge_arr[0].vertices&column_edge_arr[2].vertices).empty?
+				center_index = 2 if (column_edge_arr[0].vertices&column_edge_arr[1].vertices).empty?
+				arr = [0, 1, 2] - [center_index]
+				center_edge = column_edge_arr[center_index]
+				
+				#Find the common vertex of side edges
+				first_common_vertex = column_edge_arr[arr[0]].vertices&center_edge.vertices
+				last_common_vertex  = column_edge_arr[arr[1]].vertices&center_edge.vertices
+				
+				#FInd the face points
+				vert1 = column_edge_arr[arr[0]].vertices - [first_common_vertex[0]];vert1 = vert1[0].position
+				vert2 = first_common_vertex.first.position
+				vert3 = last_common_vertex.first.position
+				vert4 = column_edge_arr[arr[1]].vertices - [last_common_vertex[0]];vert4 = vert4[0].position
+				
+				column_face = Sketchup.active_model.entities.add_face(vert1, vert2, vert3, vert4)
+			when 4
+				#Other columns
+				adjacent_edges = []
+				column_edge_arr.each { |column_edge|
+					adjacent_edges << find_edges(column_edge, input_face)
+				}
+				
+				if adjacent_edges
+					adjacent_edges.flatten!; adjacent_edges.uniq!
+					if adjacent_edges.length == 2
+						intersect_pt = Geom.intersect_line_line(adjacent_edges[0].line, adjacent_edges[1].line)
+						adjacent_edges.each { |adj_edge| 
+							common_vertex=nil
+							column_edge_arr.each { |col_edge|
+								common_vertex = (col_edge.vertices&adj_edge.vertices)[0]
+								if common_vertex
+									Sketchup.active_model.entities.add_line(intersect_pt, common_vertex.position)
+									break
+								end
+							}
+						}
+						faces = column_edge_arr[0].faces
+						column_edge_arr.each {|column_edge|
+							faces = faces&(column_edge.faces-[input_face])						
+						}
+						column_face = faces[0]
+					else
+						puts "4 : Something wrong with the adjacent edges"
+					end
+				end
+				
+			else
+				puts "Column edges more than 4 not supported."
+			end
 
-        # column_face = Sketchup.active_model.entities.add_face(face_pts)
-        
-		prev_ents = [];Sketchup.active_model.entities.each{|ent| prev_ents << ent}
-        wall_height = -3000.mm
-		# if input_face.normal.z < 0
-			# wall_height = -wall_height
-		# end
-		column_face.reverse! if column_face.normal.z > 0
-		column_face.pushpull(wall_height, true)
-        curr_ents = [];Sketchup.active_model.entities.each{|ent| curr_ents << ent}
-        new_ents = curr_ents - prev_ents
-        column_group = Sketchup.active_model.entities.add_group(new_ents)
-    }
+			# face_pts = []
+			# column_edge_arr.each_with_index {|col, col_index| 
+				# face_pts <<[col.vertices[0], col.vertices[1]] if col_index==0
+				# face_pts <<[col.vertices[1], col.vertices[1]] if col_index==1
+			# }
+			# face_pts << intersect_pt if intersect_pt
+			# face_pts.flatten!.uniq!
+			
+			# puts "face_pts : #{face_pts}"
+
+			# column_face = Sketchup.active_model.entities.add_face(face_pts)
+			if column_face
+				prev_ents = [];Sketchup.active_model.entities.each{|ent| prev_ents << ent}
+				
+				# if input_face.normal.z < 0
+					# wall_height = -wall_height
+				# end
+				column_face.reverse! if column_face.normal.z > 0
+				column_face.pushpull(wall_height, true)
+				curr_ents = [];Sketchup.active_model.entities.each{|ent| curr_ents << ent}
+				new_ents = curr_ents - prev_ents
+				column_group = Sketchup.active_model.entities.add_group(new_ents)
+				column_group.layer = Sketchup.active_model.layers['RIO_Civil_Column']
+			end
+		}
+	end
+	
+	inner_loop_flag  	= true
+	if inner_loop_flag 
+		inner_loops 	= input_face.loops - [input_face.outer_loop]
+		inner_loops.each {|iloop|
+			column_face_flag = true
+			loop_faces = []
+			iloop.edges.each{|iedge| 
+				puts "iedge : #{iedge} : #{iedge.layer.name}"
+				column_face_flag = false unless iedge.layer.name.start_with?('RIO_Column')
+				loop_faces << iedge.faces
+			}
+			puts "column_face : #{column_face_flag}"
+			if column_face_flag
+				#Find the face of the loop.
+				loop_faces.flatten!
+				loop_faces = loop_faces - [input_face]
+				loop_faces.flatten! 
+				loop_faces.uniq!
+				
+				#Do usual pull push upto wall height
+				column_face = loop_faces[0]
+				prev_ents = [];Sketchup.active_model.entities.each{|ent| prev_ents << ent}
+				column_face.reverse! if column_face.normal.z > 0
+				column_face.pushpull(wall_height, true)
+				curr_ents = [];Sketchup.active_model.entities.each{|ent| curr_ents << ent}
+				new_ents = curr_ents - prev_ents
+				column_group = Sketchup.active_model.entities.add_group(new_ents)
+				column_group.layer = Sketchup.active_model.layers['RIO_Civil_Column']
+			end
+		}
+	end
 end
 
 def find_edges sel_edge, sel_face
@@ -690,7 +737,25 @@ def find_edges sel_edge, sel_face
 	edges
 end
 
+
 def create_beam input_face
+
+	wall_blocks = es.grep(Sketchup::ComponentInstance).select{|inst| inst.definition.name.start_with?('rio_temp_defn')}
+	beam_wall_block = nil
+	wall_blocks.each{|wblock|
+		if wblock.bounds.intersect(input_face.bounds).diagonal > 1.mm
+			beam_wall_block = wblock
+			break
+		end
+	}
+	unless beam_wall_block
+		puts "The wall beams face is not glued to any wall properly"
+		return false
+	end
+	
+	block_vector = beam_wall_block.get_attribute :rio_block_atts, 'towards_wall_vector'
+	input_face.reverse! if input_face.normal != block_vector 
+	
 	face_center = input_face.bounds.center
 	fnorm 		= input_face.normal
 	
@@ -698,8 +763,10 @@ def create_beam input_face
 	reverse_ray_res = Sketchup.active_model.raytest(face_center, fnorm.reverse)
 	
 	puts "ray_res : #{ray_res}"
-	puts "revsrese ray : #{reverse_ray_res}"
+	#puts "revsrese ray : #{reverse_ray_res}"
 	
+	pre_entities = []; post_entities=[];
+	Sketchup.active_model.entities.each{|ent| pre_entities << ent}
 	if ray_res
 		distance = ray_res[0].distance(face_center)
 		puts "ray distance : #{distance}"
@@ -710,16 +777,23 @@ def create_beam input_face
 			end
 		end
 	end
-	if reverse_ray_res
-		distance = reverse_ray_res[0].distance(face_center)
-		puts "revesre ray distance : #{distance}"
-		if distance > 60.mm
-			if ray_res[1][0].get_attribute(:rio_atts,'wall_block')
-				puts "Rev ray res : #{ray_res} : #{ray_res[1][0].get_attribute(:rio_atts,'wall_block')}"
-				input_face.pushpull(distance, true)
-			end
-		end
-	end
+	Sketchup.active_model.entities.each{|ent| post_entities << ent}
+	
+	new_entities 	= post_entities - pre_entities
+	temp_group 		= Sketchup.active_model.entities.add_group(new_entities)
+	Sketchup.active_model.layers.add('RIO_CIVIL_Beam') if Sketchup.active_model.layers['RIO_CIVIL_Beam'].nil?
+	temp_group.layer = Sketchup.active_model.layers['RIO_CIVIL_Beam']
+	return temp_group
+	# if reverse_ray_res
+		# distance = reverse_ray_res[0].distance(face_center)
+		# puts "reverse ray distance : #{distance}"
+		# if distance > 60.mm
+			# if ray_res[1][0].get_attribute(:rio_atts,'wall_block')
+				# puts "Rev ray res : #{ray_res} : #{ray_res[1][0].get_attribute(:rio_atts,'wall_block')}"
+				# input_face.pushpull(distance, true)
+			# end
+		# end
+	# end
 end
 
 
@@ -815,4 +889,32 @@ def get_wall_view floor_edge_arr
 	return view_components
 end
 
-
+def check_edge_vector input_edge, input_face
+    if !input_edge.is_a?(Sketchup::Edge)
+        puts "check_edge_vector : First input should be an Edge : #{input_edge}"
+        return false
+    end
+    if !input_face.is_a?(Sketchup::Face)
+        puts "check_edge_vector : Second input should be an Face : #{input_face}"
+        return false
+    end
+    
+    edge_vector = input_edge.line[1]
+    perpendicular_vector = Geom::Vector3d.new(-edge_vector.y, edge_vector.x, edge_vector.z)
+    
+    center_pt   = input_edge.bounds.center
+    
+    offset_pt 	= center_pt.offset(perpendicular_vector, 10.mm)
+	res     	= input_face.classify_point(offset_pt)
+	if res == Sketchup::Face::PointInside || res == Sketchup::Face::PointOnFace
+		return perpendicular_vector
+	end
+	
+	offset_pt 	= center_pt.offset(perpendicular_vector.reverse, 10.mm)
+	res     	= input_face.classify_point(offset_pt)
+	if res == Sketchup::Face::PointInside || res == Sketchup::Face::PointOnFace
+		return perpendicular_vector.reverse
+	end
+	
+	return false
+end
