@@ -1,7 +1,7 @@
 require "json"
 
-RIO_ROOT_PATH   = File.join(File.dirname(__FILE__))
-RIO_SETTINGS_PATH   = File.join(RIO_ROOT_PATH, '/' , 'settings/')
+RIO_ROOT_PATH   = File.join(File.dirname(__FILE__)) unless defined? RIO_ROOT_PATH
+RIO_SETTINGS_PATH   = File.join(RIO_ROOT_PATH, '/' , 'settings/') unless defined? RIO_SETTINGS_PATH
 
 def rioload_ruby path
     ruby_file_name = path + '.rb'
@@ -12,63 +12,49 @@ def rioload_ruby path
     end
 end
 
-def load_settings 
-    json_hash = {
-        "ANALYSIS": 'analysis_settings.json', 
+tools_file = File.join(RIO_ROOT_PATH, 'tools/load_tools')
+require tools_file
+
+
+def dload
+    ruby_files = Dir.glob(RIO_ROOT_PATH+'features/*.rb')
+    ruby_files.each { |file_name|
+        load file_name
+		puts "Loading #{file_name}"
     }
-    settings_hash = {}
-    json_hash.each do |key, file_name|
-        full_path   = File.join(RIO_SETTINGS_PATH, file_name)
-        json_file 	= File.open(full_path, 'r')
-        data		= JSON.load json_file
-        settings_hash[key] = data
-    end
-    
-    $RIO_SET = settings_hash
+	ruby_files = Dir.glob(RIO_ROOT_PATH+'core/*.rb')
+    ruby_files.each { |file_name|
+        load file_name
+		puts "Loading #{file_name}"
+    }
+	ruby_files = Dir.glob(RIO_ROOT_PATH+'tools/*.rb')
+    ruby_files.each { |file_name|
+        load file_name
+		puts "Loading #{file_name}"
+    }
 end
 
+def a3
+	seln = Sketchup.active_model.selection[0]
+	if seln
+		get_attributes seln
+	else
+		puts "Nothing selected"
+	end
+end
+
+
 def load_layers
-    ['RIO_Component', 'RIO_Wall', 'RIO_Door', 'RIO_Window'].each {|layer_name|
+    ['RIO_Component', 'RIO_Wall', 'RIO_Door', 'RIO_Window', 'RIO_Column', 'RIO_Beam'].each {|layer_name|
+        layer = Sketchup.active_model.layers[layer_name]
+        Sketchup.active_model.layers.add(layer_name) unless layer
+        layer.name=layer_name if layer
+    }
+	['RIO_Component', 'RIO_Civil_Wall', 'RIO_Civil_Door', 'RIO_Civil_Window', 'RIO_Civil_Column', 'RIO_Civil_Beam'].each {|layer_name|
         layer = Sketchup.active_model.layers[layer_name]
         Sketchup.active_model.layers.add(layer_name) unless layer
         layer.name=layer_name if layer
     }
 end
 
-def preload_items
-    load_settings
-    load_layers
-end
-
-preload_items
-
-DEVELOPER_MODE = true
-
-if DEVELOPER_MODE
-    #Debug levels ....Change to single function and debug levels
-    def RIODEBUG message
-        puts message
-    end
-
-    def RIOLOG message
-        puts message
-    end
-
-    def RIOWARN message
-        puts message
-    end
-    #---------------------------------------------------------------
-    SKETCHUP_CONSOLE.show
-else
-    def RIODEBUG message;end
-    def RIOLOG message;end
-    def RIOWARN message;end
-end
-
-def operation_dialog
-    html_str = 
-        '
-        <!DOCTYPE html>
-        <html>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.min.css">'
-end
+RIO::DevTools::load_menu_items

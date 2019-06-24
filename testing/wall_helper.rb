@@ -4,10 +4,15 @@
 WALL_HEIGHT = 3000.mm
 
 def t2
-	load 'E:\V3\Working\testing\wall_helper.rb'
+	load 'E:/V3/Working/core/SketchupHelper.rb'
+	load 'E:/V3/Working/core/CivilHelper.rb'
+	load 'E:/V3/Working/testing/wall_helper.rb'
 	#get_wall_points
 end
 
+def t3
+	load 'E:\V3\Working\features\CivilFeatures.rb'
+end
 #
 def check_room_outer_edges input_face
     if !selected_face.is_a?(Sketchup::Face) 

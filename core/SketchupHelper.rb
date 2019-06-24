@@ -41,6 +41,8 @@ module RIO
             return adjacent_edges
         end
 
-        
+        def self.get_current_entities
+            Sketchup.active_model.entities.to_a
+        end
     end # SketchupHelper
 end # RIO
