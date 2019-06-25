@@ -255,7 +255,7 @@ module RIO
             end
             #floor_edges_arr.rotate!
 
-            puts "get_views : #{floor_edges_arr}"
+            #puts "get_views : #{floor_edges_arr}"
             room_views = []
             #parse each edge
             while_count = 0
@@ -275,7 +275,7 @@ module RIO
         def self.get_wall_view floor_edge_arr
             last_viewed_wall = nil
             view_components = []
-            puts "floor_edge_arr : #{floor_edge_arr}"
+            #puts "floor_edge_arr : #{floor_edge_arr}"
             floor_edge_arr.each {|floor_edge|
                 case floor_edge.layer.name
                 when 'RIO_Wall'
@@ -331,14 +331,17 @@ module RIO
                     return false
                 end
 
-                if distance1.nil?
-                    beam_wall_block = hit_item[1][0]
-                elsif distance2.nil?
-                    beam_wall_block = hit_item[1][0]
-                else
+                if !distance1.nil?&!distance2.nil?
                     beam_wall_block = distance1<distance2 ? test1_item[0] : test2_item[0]  
                 end
+                if distance1.nil?
+                    beam_wall_block = test2_item[1][0]
+                elsif distance2.nil?
+                    beam_wall_block = test1_item[1][0]
+                end
             end
+
+            
             
             block_vector = beam_wall_block.get_attribute :rio_block_atts, 'towards_wall_vector'
             input_face.reverse! if input_face.normal != block_vector #Instead reversing the normal
@@ -357,68 +360,83 @@ module RIO
 
             beam_components = Sketchup.active_model.entities.select{|ent| ent.layer.name=='RIO_Civil_Beam'}
             beam_components.each{|ent| ent.hidden=true}
-            puts "beam_components : #{beam_components}"
+
+            column_components = Sketchup.active_model.entities.select{|ent| ent.layer.name=='RIO_Civil_Column'}
+            column_components.each{|ent| ent.hidden=true unless ent.get_attribute(:rio_block_atts, 'corner_column_flag')}
+
+            #puts "beam_components : #{beam_components}"
+            #puts "column components : #{column_components}"
+
             #First finish checking all opposite walls
+            allowed_intersections = ['column', 'wall']
             start_pts.each { |start_pt|
                 start_pt = start_pt.position if start_pt.is_a?(Sketchup::Vertex)
                 hit_point, hit_item     = Sketchup.active_model.raytest(face_center, fnorm)
-                if hit_point[0] && hit_item[0].is_a?(Sketchup::ComponentInstance)
-                    if hit_item[0].get_attribute(:rio_atts, 'wall_block')
+                if hit_item && hit_item[0].is_a?(Sketchup::ComponentInstance)
+                    block_type = hit_item[0].get_attribute(:rio_block_atts, 'block_type')
+                    if block_type && allowed_intersections.include?(block_type)
                         beam_hit_found = hit_item[0]
                         distance = start_pt.distance(hit_point)
+                        break
                     end
                 end
             }
-
-            beam_components.each{|ent| ent.hidden=false}
-
-            if beam_hit_found
-                pre_entities = Sketchup.active_model.entities.to_a
-                input_face.pushpull(distance, true)
-                post_entities = Sketchup.active_model.entities.to_a
-                new_entities 	= post_entities - pre_entities
-                temp_group 		= Sketchup.active_model.entities.add_group(new_entities)
-                Sketchup.active_model.layers.add('RIO_Civil_Beam') if Sketchup.active_model.layers['RIO_Civil_Beam'].nil?
-                temp_group.layer = Sketchup.active_model.layers['RIO_Civil_Beam']
-                return temp_group
+            #puts "beam_wall_block : #{beam_wall_block} : #{beam_hit_found}"
+            #puts "beam_hit_found : #{beam_hit_found} at distance #{distance}"
+            if beam_wall_block == beam_hit_found
+                create_beam input_face
             else
-                puts "No opposite Wall found.Cannot draw wall"
-                return false
-            end
+                beam_components.each{|ent| ent.hidden=false}
+                column_components.each{|ent| ent.hidden=false}
 
-            if false
-                ray_res 		= Sketchup.active_model.raytest(face_center, fnorm)
-                reverse_ray_res = Sketchup.active_model.raytest(face_center, fnorm.reverse)
-                
-                puts "ray_res : #{ray_res}"
-                #puts "reverse ray : #{reverse_ray_res}"
-                
-                pre_entities = []; post_entities=[];
-                Sketchup.active_model.entities.each{|ent| pre_entities << ent}
-                if ray_res
-                    distance = ray_res[0].distance(face_center)
-                    puts "ray distance : #{distance}"
-                    if distance > 60.mm
-                        if ray_res[1][0].get_attribute(:rio_atts,'wall_block')
-                            puts "ray res : #{ray_res} : #{ray_res[1][0].get_attribute(:rio_atts,'wall_block')}"
-                            input_face.pushpull(distance, true)
+                if beam_hit_found
+                    pre_entities = Sketchup.active_model.entities.to_a
+                    input_face.pushpull(distance, true)
+                    post_entities = Sketchup.active_model.entities.to_a
+                    new_entities 	= post_entities - pre_entities
+                    temp_group 		= Sketchup.active_model.entities.add_group(new_entities)
+                    Sketchup.active_model.layers.add('RIO_Civil_Beam') if Sketchup.active_model.layers['RIO_Civil_Beam'].nil?
+                    temp_group.layer = Sketchup.active_model.layers['RIO_Civil_Beam']
+                    return temp_group
+                else
+                    puts "No opposite Wall found.Cannot draw wall"
+                    return false
+                end
+
+                if false
+                    ray_res 		= Sketchup.active_model.raytest(face_center, fnorm)
+                    reverse_ray_res = Sketchup.active_model.raytest(face_center, fnorm.reverse)
+                    
+                    puts "ray_res : #{ray_res}"
+                    #puts "reverse ray : #{reverse_ray_res}"
+                    
+                    pre_entities = []; post_entities=[];
+                    Sketchup.active_model.entities.each{|ent| pre_entities << ent}
+                    if ray_res
+                        distance = ray_res[0].distance(face_center)
+                        puts "ray distance : #{distance}"
+                        if distance > 60.mm
+                            if ray_res[1][0].get_attribute(:rio_atts,'wall_block')
+                                puts "ray res : #{ray_res} : #{ray_res[1][0].get_attribute(:rio_atts,'wall_block')}"
+                                input_face.pushpull(distance, true)
+                            end
                         end
                     end
+                    Sketchup.active_model.entities.each{|ent| post_entities << ent}
                 end
-                Sketchup.active_model.entities.each{|ent| post_entities << ent}
-            end
 
-            
-            # if reverse_ray_res
-                # distance = reverse_ray_res[0].distance(face_center)
-                # puts "reverse ray distance : #{distance}"
-                # if distance > 60.mm
-                    # if ray_res[1][0].get_attribute(:rio_atts,'wall_block')
-                        # puts "Rev ray res : #{ray_res} : #{ray_res[1][0].get_attribute(:rio_atts,'wall_block')}"
-                        # input_face.pushpull(distance, true)
+                
+                # if reverse_ray_res
+                    # distance = reverse_ray_res[0].distance(face_center)
+                    # puts "reverse ray distance : #{distance}"
+                    # if distance > 60.mm
+                        # if ray_res[1][0].get_attribute(:rio_atts,'wall_block')
+                            # puts "Rev ray res : #{ray_res} : #{ray_res[1][0].get_attribute(:rio_atts,'wall_block')}"
+                            # input_face.pushpull(distance, true)
+                        # end
                     # end
                 # end
-            # end
+            end
         end
     end
 end

@@ -195,6 +195,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                     return false   
                 end
 
+                puts "HHH : #{window_height} : #{wall_height} : #{door_height} : #{window_offset}"
                 CivilHelper.add_wall_corner_lines
                 room_views_a = CivilHelper.get_wall_views @room_face
 
@@ -264,6 +265,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                     end
                     view_name = wall_edge.get_attribute(:rio_edge_atts, 'view_name')
 
+                    wall_inst.set_attribute(:rio_block_atts, 'block_type', 'wall')
                     wall_inst.set_attribute(:rio_block_atts, 'wall_type', 'normal')
                     wall_inst.set_attribute(:rio_block_atts, 'edge_id', wall_edge.persistent_id)
                     wall_inst.set_attribute(:rio_block_atts, 'view_name', view_name)
@@ -299,7 +301,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                 #------------------------------------------
                 column_edges = @room_face.edges.select{|e| e.layer.name == 'RIO_Column'}
                 if column_edges.length > 0
-                    create_columns @room_face, wall_height
+                    column_inst = create_columns @room_face, wall_height
                     puts "Columns created"
                 end
 
@@ -503,6 +505,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                 Sketchup.active_model.layers.add('RIO_Civil_Column') if Sketchup.active_model.layers['RIO_Civil_Column'].nil?
 
                 #Working on the outer loop of the floor....
+                outer_columns = []
                 outer_loop_flag = true
                 if outer_loop_flag
                     face_edges = input_face.outer_loop.edges
@@ -524,10 +527,11 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                         end
                     }
 
-                    puts "columns : #{columns.length} : #{columns}"
+                    #puts "columns : #{columns.length} : #{columns}"
                     columns.each { |column_edge_arr|
                         intersect_pt 	= nil
                         column_face		= nil
+                        corner_column_flag = false
 
                         case column_edge_arr.length
                         when 1
@@ -564,6 +568,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                             pts_a.flatten!; pts_a.uniq!
 
                             column_face = Sketchup.active_model.entities.add_face(pts_a)
+                            corner_column_flag = true
                         when 3
                             #This code has been written because the array of edges are not regular....They are not sorted sometimes.
 
@@ -658,8 +663,16 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                             column_group = Sketchup.active_model.entities.add_group(new_ents)
                             column_group.layer = Sketchup.active_model.layers['RIO_Civil_Column']
                             comp_inst = column_group.to_component
+                            
+                            #Set attributes
+                            view_name = column_edge_arr[0].get_attribute(:rio_edge_atts, 'view_name')
+                            comp_inst.set_attribute(:rio_block_atts, 'corner_column_flag', corner_column_flag)
+                            comp_inst.set_attribute(:rio_block_atts, 'block_type', 'column')
+                            comp_inst.set_attribute(:rio_block_atts, 'view_name', view_name)
+                            comp_inst.set_attribute(:rio_block_atts, 'edge_id', column_edge_arr[0].persistent_id)
+                            
                         end
-
+                        outer_columns << comp_inst
                     }
                 end
 

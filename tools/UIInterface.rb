@@ -14,6 +14,13 @@ module RIO
 				@style_dialog = UI::HtmlDialog::STYLE_DIALOG
 			end
 			
+			def get_params_from_string param_str
+				#Benchmark fast
+				param_str = param_str[3..-2]
+				elements_a = param_str.split('"@"')
+				elements_a
+			end
+
 			def load_tools
 				dialog_hash = {}
 				dialog_hash[:dialog_title] 	= 'Rio Dev Tools'
@@ -32,13 +39,26 @@ module RIO
 				@@rio_dialog.show()
 				
 				@@rio_dialog.add_action_callback("rioCreateRoom"){|dialog, params|
-					puts "Inside UI rioCreateRoom  ++#{params}++"
-					ob = RIO::CivilMod::PolyRoom.new(  :room_name=>'rnam1',
-                            :wall_height=>3000.mm, 
-                            :wall_color=>'blue',
-                            :door_height=>2000.mm, 
-                            :window_height=>800.mm, 
-                            :window_offset=>1000.mm) 
+					puts "Inside UI..   #{dialog} -- #{params}"
+					elements_a = get_params_from_string params
+					room_name 		= elements_a[0]
+					wall_height 	= elements_a[1].to_f.mm
+					door_height 	= elements_a[2].to_f.mm
+					window_height	= elements_a[3].to_f.mm
+					window_offset	= elements_a[4].to_f.mm 
+
+					ob = RIO::CivilMod::PolyRoom.new(  :room_name=>room_name,
+						:wall_height=>wall_height, 
+						:door_height=>door_height,
+						:window_height=>window_height, 
+						:window_offset=>window_offset)
+							
+						# ob = RIO::CivilMod::PolyRoom.new(  :room_name=>'rnam1',
+                        #     :wall_height=>3000.mm, 
+                        #     :wall_color=>'blue',
+                        #     :door_height=>2000.mm, 
+                        #     :window_height=>800.mm, 
+                        #     :window_offset=>1000.mm) 
 				}
 				# @@rio_dialog.set_on_close { 
 				# 	@@rio_dialog = nil
