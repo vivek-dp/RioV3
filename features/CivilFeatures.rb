@@ -547,10 +547,13 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
 
                             intersect_pt = Geom.intersect_line_line(adjacent_edges[0].line, adjacent_edges[1].line)
 
+                            common_vertex = column_edge_arr[1].vertices&column_edge_arr[0].vertices
                             vert_a = []
-                            vert_a << column_edge_arr[1].vertices - column_edge_arr[0].vertices
+                            vert_a << column_edge_arr[0].vertices-common_vertex
+                            vert_a << common_vertex
+                            vert_a << column_edge_arr[1].vertices-common_vertex
                             vert_a << intersect_pt
-                            vert_a << column_edge_arr[0].vertices
+                            
                             vert_a.flatten!; vert_a.uniq!
 
                             pts_a = []; vert_a.each{|pt| 
