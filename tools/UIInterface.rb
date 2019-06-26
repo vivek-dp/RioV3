@@ -16,7 +16,7 @@ module RIO
 			
 			def get_params_from_string param_str
 				#Benchmark fast
-				param_str = param_str[3..-2]
+				param_str = param_str[2..-2]
 				elements_a = param_str.split('"@"')
 				elements_a
 			end
@@ -60,9 +60,10 @@ module RIO
                         #     :window_height=>800.mm, 
                         #     :window_offset=>1000.mm) 
 				}
-				# @@rio_dialog.set_on_close { 
-				# 	@@rio_dialog = nil
-				# }
+				@@rio_dialog.add_action_callback("rioRemoveRoomComponents") {|dialog, params|
+					RIO::CivilHelper.remove_room_entities(params)
+				}
+				
 			end
 		end
 	end

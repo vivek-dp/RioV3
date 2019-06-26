@@ -58,3 +58,4 @@ def load_layers
 end
 
 RIO::DevTools::load_menu_items
+RIO::DevTools::load_utilities

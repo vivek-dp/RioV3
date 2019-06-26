@@ -53,10 +53,13 @@
                 <input type="number" value="970" placeholder="Please enter in mm. Without preceding mm." id="CR_window_offset">
               </div>
               <div class="field">
-                <span style:"display:inline;width:10%" id="colorpalettediv">
-                </span>
+                <!--<span style:"display:inline;width:10%" id="colorpalettediv">
+                </span>-->
                 <span style:"display:inline;width:50%">      
-                  <button class="ui button" type="submit" onclick="createRoom()">Create Room</button>
+                  <button class="ui green button" type="submit" onclick="jsCreateRoom()">Create Room</button>
+                </span>
+				<span style:"display:inline;width:50%">      
+                  <button class="ui red button" type="submit" onclick="jsDeleteRoomComponents()">Delete Room</button>
                 </span>
               </div>
             </div>

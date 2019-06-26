@@ -341,7 +341,14 @@ module RIO
                 end
             end
 
-            
+            if beam_wall_block.nil?
+                puts "Could not identify where the beam starts from. Please draw the face on some wall or column."
+                return false
+            else
+                room_name = beam_wall_block.get_attribute(:rio_block_atts, 'room_name')
+                view_name = beam_wall_block.get_attribute(:rio_block_atts, 'view_name')
+                start_block_id = beam_wall_block.persistent_id
+            end
             
             block_vector = beam_wall_block.get_attribute :rio_block_atts, 'towards_wall_vector'
             input_face.reverse! if input_face.normal != block_vector #Instead reversing the normal
@@ -354,76 +361,119 @@ module RIO
             distance = 0.mm
 
             start_pts = [face_center]
-            start_pts << input_face.vertices
+            input_face.vertices.each { |face_vertex|
+                face_point = face_vertex.position
+                center_vector = face_point.vector_to(face_center)
+                start_pt = face_point.offset(center_vector, 10.mm)
+                start_pts << start_pt
+            }
             start_pts.flatten!
             start_pts.uniq! #Not needed
 
             beam_components = Sketchup.active_model.entities.select{|ent| ent.layer.name=='RIO_Civil_Beam'}
             beam_components.each{|ent| ent.hidden=true}
 
-            column_components = Sketchup.active_model.entities.select{|ent| ent.layer.name=='RIO_Civil_Column'}
-            column_components.each{|ent| ent.hidden=true unless ent.get_attribute(:rio_block_atts, 'corner_column_flag')}
+           
 
-            #puts "beam_components : #{beam_components}"
-            #puts "column components : #{column_components}"
+            beam_algorithm = 2
+            case beam_algorithm
+            when 1
 
-            #First finish checking all opposite walls
-            allowed_intersections = ['column', 'wall']
-            start_pts.each { |start_pt|
-                start_pt = start_pt.position if start_pt.is_a?(Sketchup::Vertex)
-                hit_point, hit_item     = Sketchup.active_model.raytest(face_center, fnorm)
-                if hit_item && hit_item[0].is_a?(Sketchup::ComponentInstance)
-                    block_type = hit_item[0].get_attribute(:rio_block_atts, 'block_type')
-                    if block_type && allowed_intersections.include?(block_type)
-                        beam_hit_found = hit_item[0]
-                        distance = start_pt.distance(hit_point)
-                        break
+                #   First finish checking all opposite walls
+                #   This algorithm follows below
+                # - Hide all beams and columns except corner columns.
+                # - Take 5 pts on the face and find a point each offset at 10mm to the center-- To avoid the overlap on the corners
+                # - When u find a point hitting the wall or the corner column stop.
+                allowed_intersections = ['column', 'wall']
+                
+                column_components = Sketchup.active_model.entities.select{|ent| ent.layer.name=='RIO_Civil_Column'}
+                column_components.each{|ent| ent.hidden=true unless ent.get_attribute(:rio_block_atts, 'corner_column_flag')}
+
+                start_pts.each { |start_pt|
+                    start_pt = start_pt.position if start_pt.is_a?(Sketchup::Vertex)
+                    hit_point, hit_item     = Sketchup.active_model.raytest(start_pt, fnorm)
+                    if hit_item && hit_item[0].is_a?(Sketchup::ComponentInstance)
+                        block_type = hit_item[0].get_attribute(:rio_block_atts, 'block_type')
+                        if block_type && allowed_intersections.include?(block_type)
+                            beam_hit_found = hit_item[0]
+                            distance = start_pt.distance(hit_point)
+                            break
+                        end
                     end
-                end
-            }
-            #puts "beam_wall_block : #{beam_wall_block} : #{beam_hit_found}"
-            #puts "beam_hit_found : #{beam_hit_found} at distance #{distance}"
+                }
+                puts "beam_components : #{beam_components}"
+                puts "column components : #{column_components}"
+
+                column_components.each{|ent| ent.hidden=false}
+            when 2
+                beam_length = 0
+                start_pts.each { |start_pt|
+                    start_pt = start_pt.position if start_pt.is_a?(Sketchup::Vertex)
+                    last_point, hit_entity = find_last_hit_point start_pt, fnorm, room_name
+                    if last_point
+                        offset_distance = last_point.distance start_pt
+                        if offset_distance > beam_length
+                            beam_hit_found = hit_entity
+                            beam_length = offset_distance 
+                        end
+                    end
+                }
+            end
+            beam_components.each{|ent| ent.hidden=false}
+
+            puts "beam_wall_block : #{beam_wall_block} : #{beam_hit_found}"
+            puts "beam_hit_found : #{beam_hit_found} at distance #{beam_length}"
+            sel.add(beam_wall_block)
+            sel.add(beam_hit_found)
             if beam_wall_block == beam_hit_found
-                create_beam input_face
-            else
                 beam_components.each{|ent| ent.hidden=false}
                 column_components.each{|ent| ent.hidden=false}
-
+                create_beam input_face
+            else
                 if beam_hit_found
                     pre_entities = Sketchup.active_model.entities.to_a
-                    input_face.pushpull(distance, true)
+                    input_face.pushpull(beam_length, true)
                     post_entities = Sketchup.active_model.entities.to_a
                     new_entities 	= post_entities - pre_entities
                     temp_group 		= Sketchup.active_model.entities.add_group(new_entities)
                     Sketchup.active_model.layers.add('RIO_Civil_Beam') if Sketchup.active_model.layers['RIO_Civil_Beam'].nil?
                     temp_group.layer = Sketchup.active_model.layers['RIO_Civil_Beam']
-                    return temp_group
+                    beam_component = temp_group.to_component
+                    
+                    beam_component.set_attribute(:rio_block_atts, 'block_type', 'beam')
+                    beam_component.set_attribute(:rio_block_atts, 'view_name', view_name)
+                    comp_inst.set_attribute(:rio_block_atts, 'face_id', input_face.persistent_id)
+                    comp_inst.set_attribute(:rio_block_atts, 'room_name', room_name)
+                    comp_inst.set_attribute(:rio_block_atts, 'beam_length', beam_length)
+                    comp_inst.set_attribute(:rio_block_atts, 'start_block', start_block_id)
+                    comp_inst.set_attribute(:rio_block_atts, 'end_block', beam_hit_found.persistent_id)
+                    return beam_component
                 else
-                    puts "No opposite Wall found.Cannot draw wall"
+                    puts "No opposite Wall found.Cannot draw Beam"
                     return false
                 end
 
-                if false
-                    ray_res 		= Sketchup.active_model.raytest(face_center, fnorm)
-                    reverse_ray_res = Sketchup.active_model.raytest(face_center, fnorm.reverse)
+                # if false
+                #     ray_res 		= Sketchup.active_model.raytest(face_center, fnorm)
+                #     reverse_ray_res = Sketchup.active_model.raytest(face_center, fnorm.reverse)
                     
-                    puts "ray_res : #{ray_res}"
-                    #puts "reverse ray : #{reverse_ray_res}"
+                #     puts "ray_res : #{ray_res}"
+                #     #puts "reverse ray : #{reverse_ray_res}"
                     
-                    pre_entities = []; post_entities=[];
-                    Sketchup.active_model.entities.each{|ent| pre_entities << ent}
-                    if ray_res
-                        distance = ray_res[0].distance(face_center)
-                        puts "ray distance : #{distance}"
-                        if distance > 60.mm
-                            if ray_res[1][0].get_attribute(:rio_atts,'wall_block')
-                                puts "ray res : #{ray_res} : #{ray_res[1][0].get_attribute(:rio_atts,'wall_block')}"
-                                input_face.pushpull(distance, true)
-                            end
-                        end
-                    end
-                    Sketchup.active_model.entities.each{|ent| post_entities << ent}
-                end
+                #     pre_entities = []; post_entities=[];
+                #     Sketchup.active_model.entities.each{|ent| pre_entities << ent}
+                #     if ray_res
+                #         distance = ray_res[0].distance(face_center)
+                #         puts "ray distance : #{distance}"
+                #         if distance > 60.mm
+                #             if ray_res[1][0].get_attribute(:rio_atts,'wall_block')
+                #                 puts "ray res : #{ray_res} : #{ray_res[1][0].get_attribute(:rio_atts,'wall_block')}"
+                #                 input_face.pushpull(distance, true)
+                #             end
+                #         end
+                #     end
+                #     Sketchup.active_model.entities.each{|ent| post_entities << ent}
+                # end
 
                 
                 # if reverse_ray_res
@@ -437,6 +487,112 @@ module RIO
                     # end
                 # end
             end
+        end
+
+        def self.get_room_entities room_name
+            entities_array = []
+            entities_array << Sketchup.active_model.entities.select{|ent| ent.get_attribute(:rio_block_atts, 'room_name')==room_name}
+            entities_array.flatten!
+            entities_array
+        end
+
+        def self.remove_room_entities room_name=nil
+            unless room_name
+                puts "Room name cannot be empty"
+                return false
+            end
+            puts "Room to be deleted : ++#{room_name}++"
+            room_entities = get_room_entities(room_name)
+            if room_entities.empty?
+                puts "Nothing to remove"
+            else
+                wall_entities   = room_entities.select{|ent| ent.get_attribute(:rio_block_atts, 'block_type')=='wall'}
+                door_entities   = room_entities.select{|ent| ent.get_attribute(:rio_block_atts, 'block_type')=='door'}
+                window_entities = room_entities.select{|ent| ent.get_attribute(:rio_block_atts, 'block_type')=='window'}
+                column_entities = room_entities.select{|ent| ent.get_attribute(:rio_block_atts, 'block_type')=='column'}
+                beam_entities   = room_entities.select{|ent| ent.get_attribute(:rio_block_atts, 'block_type')=='beam'}
+                
+                puts "-----------------Room entities --------------------------------"
+                puts "Wall                      : #{wall_entities.length}"
+                puts "Door                      : #{door_entities.length}"
+                puts "Window                    : #{window_entities.length}"
+                puts "Column                    : #{column_entities.length}"
+                puts "Beam                      : #{beam_entities.length}"
+                puts "#{room_entities.length} #{room_name} entities have been deleted"
+                Sketchup.active_model.entities.erase_entities(room_entities)
+                
+            end
+            return true
+        end
+        
+        # RIO::CivilHelper::find_last_hit_point fsel.center, X_AXIS, 'MBR'
+        def self.find_last_hit_point input_pt, input_vector, room_name
+            room_entities_a = get_room_entities room_name
+            continue_raytest = true
+            count = 1 #Just to avoid infinite loop
+            allowed_intersections = ['column', 'wall']
+            hidden_items = []
+            hit_points_a = []
+            puts "Room entities : #{room_entities_a}"
+
+            while continue_raytest
+                puts "Loop raytest : #{count}"
+                hit_point, hit_item     = Sketchup.active_model.raytest(input_pt, input_vector)
+                if hit_item && hit_item[0].is_a?(Sketchup::ComponentInstance)
+                    hit_entity = hit_item[0]
+                    puts "Comp : #{hit_entity}"
+                    block_type = hit_entity.get_attribute(:rio_block_atts, 'block_type')
+                    if room_entities_a.include?(hit_entity)
+                        puts "Allowed entity #{hit_entity}"
+                        if allowed_intersections.include?(block_type)
+                            puts "Adding to hidden items : #{hit_entity}"
+                            hidden_items << hit_entity
+                            hit_points_a << hit_point
+                            hit_entity.hidden = true
+                        else
+                            puts "This is not a valid room entity where the beam can finish."
+                            return nil
+                        end
+                    else
+                        puts "Unallowed enity : #{hit_entity}"
+                        continue_raytest = false
+                    end
+                else
+                    puts "Nothing hit.Stopping raytest"
+                    continue_raytest = false
+                end
+                count = count+1
+                continue_raytest = false if count > 20
+            end
+            hidden_items.each { |ent| ent.hidden=false}
+            puts "hit_points : #{hit_points_a}"
+            if hit_points_a.empty?
+                puts "No valid entities found in raytest"
+                return nil
+            else
+                return hit_points_a.last, hidden_items.last
+            end
+        end
+
+        def self.perimeter_wall
+            outer_walls = get_outer_walls
+            wall_width 	= 30.mm 
+            outer_walls.each { |wall_edge|
+                verts = wall_edge.vertices
+                
+                clockwise = check_clockwise_edge wall_edge, wall_edge.faces[0]
+                if clockwise
+                    pt1, pt2 = verts[0].position, verts[1].position
+                else
+                    pt1, pt2 = verts[1].position, verts[0].position
+                end
+                if wall_edge.layer.name == 'RIO_Wall'
+                    wall_inst = CivilHelper::place_cuboidal_component(pt2, pt1, comp_height: WALL_HEIGHT, comp_width: wall_width)
+                elsif wall_edge.layer.name == 'RIO_Window'
+                    #create_window window_edge, room_face, window_height, window_offset, wall_height
+                end
+
+            }
         end
     end
 end

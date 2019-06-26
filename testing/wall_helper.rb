@@ -162,25 +162,7 @@ def find_edge_face_vector edge, face
 	return perp_vector.reverse
 end
 
-def perimeter_wall
-	outer_walls = get_outer_walls
-	wall_width 	= 30.mm 
-	outer_walls.each { |wall_edge|
-		verts = wall_edge.vertices
-		
-		clockwise = check_clockwise_edge wall_edge, wall_edge.faces[0]
-		if clockwise
-			pt1, pt2 = verts[0].position, verts[1].position
-		else
-			pt1, pt2 = verts[1].position, verts[0].position
-		end
-		if wall_edge.layer.name == 'RIO_Wall'
-			create_wall_instance(pt2, pt1, wall_height: WALL_HEIGHT, wall_width: wall_width)
-		elsif wall_edge.layer.name == 'RIO_Window'
-			#create_window window_edge, room_face, window_height, window_offset, wall_height
-		end
-	}
-end
+
 
 def check_clockwise_edge edge, face
 	#Temp code

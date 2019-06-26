@@ -44,5 +44,7 @@ module RIO
         def self.get_current_entities
             Sketchup.active_model.entities.to_a
         end
+		
+		
     end # SketchupHelper
 end # RIO
