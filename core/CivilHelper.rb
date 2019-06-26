@@ -202,15 +202,21 @@ module RIO
         end
 
         def self.find_edges sel_edge, sel_face
+            puts "find_edges : #{sel_edge} : #{sel_face}"
+            #sel.add(sel_edge)
+            #sel.add(sel_face)
+
             edge_arr = []
             sel_edge.vertices.each{|ver|
                 #puts ver.edges&sel_face.edges
                 common_edges = ver.edges&sel_face.edges
                 edge_arr << common_edges
             }
-
-            edges = edge_arr.flatten!.uniq! - [sel_edge]
+            edges = edge_arr.flatten!
+            edges = edges.uniq!
+            edges = edges - [sel_edge]
             edges.select!{|ed| ed.layer.name!='RIO_Column'}
+            #sel.clear
             edges
         end
 
@@ -431,6 +437,18 @@ module RIO
                 create_beam input_face
             else
                 if beam_hit_found
+                    input_face.set_attribute(:rio_block_atts, 'beam_face', 'true')
+                    input_face.set_attribute(:rio_block_atts, 'room_name', room_name) 
+                    input_face.set_attribute(:rio_block_atts, 'view_name', view_name)
+                    input_face.set_attribute(:rio_block_atts, 'block_type', 'face')
+
+                    input_face.edges.each { |i_edge|
+                        i_edge.set_attribute(:rio_block_atts, 'beam_edge', 'true')
+                        i_edge.set_attribute(:rio_block_atts, 'room_name', room_name) 
+                        i_edge.set_attribute(:rio_block_atts, 'view_name', view_name)
+                        i_edge.set_attribute(:rio_block_atts, 'block_type', 'edge')
+                    }
+
                     pre_entities = Sketchup.active_model.entities.to_a
                     input_face.pushpull(beam_length, true)
                     post_entities = Sketchup.active_model.entities.to_a
@@ -442,11 +460,11 @@ module RIO
                     
                     beam_component.set_attribute(:rio_block_atts, 'block_type', 'beam')
                     beam_component.set_attribute(:rio_block_atts, 'view_name', view_name)
-                    comp_inst.set_attribute(:rio_block_atts, 'face_id', input_face.persistent_id)
-                    comp_inst.set_attribute(:rio_block_atts, 'room_name', room_name)
-                    comp_inst.set_attribute(:rio_block_atts, 'beam_length', beam_length)
-                    comp_inst.set_attribute(:rio_block_atts, 'start_block', start_block_id)
-                    comp_inst.set_attribute(:rio_block_atts, 'end_block', beam_hit_found.persistent_id)
+                    beam_component.set_attribute(:rio_block_atts, 'face_id', input_face.persistent_id)
+                    beam_component.set_attribute(:rio_block_atts, 'room_name', room_name)
+                    beam_component.set_attribute(:rio_block_atts, 'beam_length', beam_length)
+                    beam_component.set_attribute(:rio_block_atts, 'start_block', start_block_id)
+                    beam_component.set_attribute(:rio_block_atts, 'end_block', beam_hit_found.persistent_id)
                     return beam_component
                 else
                     puts "No opposite Wall found.Cannot draw Beam"
@@ -511,13 +529,17 @@ module RIO
                 window_entities = room_entities.select{|ent| ent.get_attribute(:rio_block_atts, 'block_type')=='window'}
                 column_entities = room_entities.select{|ent| ent.get_attribute(:rio_block_atts, 'block_type')=='column'}
                 beam_entities   = room_entities.select{|ent| ent.get_attribute(:rio_block_atts, 'block_type')=='beam'}
-                
+                face_entities   = room_entities.select{|ent| ent.get_attribute(:rio_block_atts, 'block_type')=='face'}
+                edge_entities   = room_entities.select{|ent| ent.get_attribute(:rio_block_atts, 'block_type')=='edge'}
+
                 puts "-----------------Room entities --------------------------------"
                 puts "Wall                      : #{wall_entities.length}"
                 puts "Door                      : #{door_entities.length}"
                 puts "Window                    : #{window_entities.length}"
                 puts "Column                    : #{column_entities.length}"
                 puts "Beam                      : #{beam_entities.length}"
+                puts "Face                      : #{face_entities.length}"
+                puts "Edge                      : #{edge_entities.length}"
                 puts "#{room_entities.length} #{room_name} entities have been deleted"
                 Sketchup.active_model.entities.erase_entities(room_entities)
                 
@@ -594,5 +616,183 @@ module RIO
 
             }
         end
+
+        
+        def self.create_single_column column_edge_arr, column_face=nil, wall_height=nil
+            puts "create_single_column": #{column_edge_arr}
+            intersect_pt 	    = nil
+            corner_column_flag  = false
+            input_face          = @room_face
+            column_layer = Sketchup.active_model.layers['RIO_Column']
+
+            
+            column_edge_arr.each{|c_edge|
+                puts "c_edge : #{c_edge.layer.name}"
+                c_edge.layer=column_layer unless c_edge.layer.name=='RIO_Wall'
+            }
+
+            if column_face
+                column_edge_arr.select!{|edge| edge.layer.name=='RIO_Column'}
+                column_face.edges.each{|col_edge|
+                    puts "col_edge.layer.name : #{col_edge.layer.name}"
+                    if col_edge.layer.name == 'RIO_Column'
+                        col_edge.faces.each{ |col_face|
+                            input_face = col_face if col_face.get_attribute(:rio_atts, 'room_name') 
+                        }
+                    end        
+                }
+                if input_face
+                    puts "Room Face is : #{input_face}"
+                    wall_height = input_face.get_attribute(:rio_atts, 'wall_height')
+                    room_name   = input_face.get_attribute(:rio_atts, 'room_name')
+                else
+                    puts "The room face could not be found"
+                    return false
+                end
+            end
+
+            case column_edge_arr.length
+            when 1
+                #Corner column with only one edge visible
+                column_edge = column_edge_arr[0]
+                adjacent_edges = CivilHelper::find_edges(column_edge_arr[0], input_face)
+                intersect_pt = Geom.intersect_line_line(adjacent_edges[0].line, adjacent_edges[1].line)
+                col_verts = column_edge.vertices
+                column_face = Sketchup.active_model.entities.add_face(col_verts[0], col_verts[1], intersect_pt)
+            when 2
+                adjacent_edges = []
+                column_edge_arr.each { |column_edge|
+                    adjacent_edges << CivilHelper::find_edges(column_edge, input_face)
+                }
+                #puts "adj : #{adjacent_edges}"
+                adjacent_edges.flatten!; adjacent_edges.uniq!
+                view_name = []
+                adjacent_edges.each{ |a_edge|
+                    view_name << a_edge.get_attribute(:rio_edge_atts, 'view_name')
+                }
+                column_edge_arr.each { |column_edge|
+                    column_edge.set_attribute(:rio_edge_atts, 'view_name', view_name)
+                }
+                intersect_pt = Geom.intersect_line_line(adjacent_edges[0].line, adjacent_edges[1].line)
+
+                common_vertex = column_edge_arr[1].vertices&column_edge_arr[0].vertices
+                vert_a = []
+                vert_a << column_edge_arr[0].vertices-common_vertex
+                vert_a << common_vertex
+                vert_a << column_edge_arr[1].vertices-common_vertex
+                vert_a << intersect_pt
+                
+                vert_a.flatten!; vert_a.uniq!
+
+                pts_a = []; vert_a.each{|pt| 
+                    pt = pt.position if pt.is_a?(Sketchup::Vertex)
+                    pts_a <<  pt
+                }
+                #pts_a << intersect_pt; 
+                pts_a.flatten!; pts_a.uniq!
+
+                column_face = Sketchup.active_model.entities.add_face(pts_a)
+                corner_column_flag = true
+            when 3
+                #This code has been written because the array of edges are not regular....They are not sorted sometimes.
+
+                #Find the center edge
+                center_index = 0 if (column_edge_arr[1].vertices&column_edge_arr[2].vertices).empty?
+                center_index = 1 if (column_edge_arr[0].vertices&column_edge_arr[2].vertices).empty?
+                center_index = 2 if (column_edge_arr[0].vertices&column_edge_arr[1].vertices).empty?
+                arr = [0, 1, 2] - [center_index]
+                center_edge = column_edge_arr[center_index]
+
+                #Find the common vertex of side edges
+                first_common_vertex = column_edge_arr[arr[0]].vertices&center_edge.vertices
+                last_common_vertex  = column_edge_arr[arr[1]].vertices&center_edge.vertices
+
+                #FInd the face points
+                vert1 = column_edge_arr[arr[0]].vertices - [first_common_vertex[0]];vert1 = vert1[0].position
+                vert2 = first_common_vertex.first.position
+                vert3 = last_common_vertex.first.position
+                vert4 = column_edge_arr[arr[1]].vertices - [last_common_vertex[0]];vert4 = vert4[0].position
+
+                column_face = Sketchup.active_model.entities.add_face(vert1, vert2, vert3, vert4)
+            when 4
+                #Other columns
+                adjacent_edges = []
+                column_edge_arr.each { |column_edge|
+                    if column_edge.layer.name == 'RIO_Column'
+                        adjacent_edges << CivilHelper::find_edges(column_edge, input_face)
+                    end
+                }
+
+                puts "adjacent edges : #{adjacent_edges}"
+                if adjacent_edges
+                    adjacent_edges.flatten!; adjacent_edges.uniq!
+                    puts "post adjacent edges : #{adjacent_edges}"
+                    sel.add(adjacent_edges)
+                    if adjacent_edges.length == 2
+                        intersect_pt = Geom.intersect_line_line(adjacent_edges[0].line, adjacent_edges[1].line)
+                        adjacent_edges.each { |adj_edge|
+                            common_vertex=nil
+                            column_edge_arr.each { |col_edge|
+                                common_vertex = (col_edge.vertices&adj_edge.vertices)[0]
+                                if common_vertex && intersect_pt
+                                    puts "intersect pt : #{intersect_pt} : #{common_vertex}"
+                                    Sketchup.active_model.entities.add_line(intersect_pt, common_vertex.position)
+                                    break
+                                end
+                            }
+                        }
+                        column_edge_arr.each {|column_edge|
+                            column_edge.find_faces
+                        }
+                        faces = column_edge_arr[0].faces
+                        column_edge_arr.each {|column_edge|
+                            faces = faces&(column_edge.faces-[input_face])
+                        }
+                        column_face = faces[0]
+                    else
+                        puts "4 : Something wrong with the adjacent edges"
+                    end
+                end
+
+            else
+                puts "Column edges more than 4 not supported."
+            end
+            column_edge_arr.each {|column_edge|
+                column_edge.find_faces
+            }
+
+            if column_face
+                offset_pts = []
+                column_face.edges.each{ |edge|
+                    edge.layer.name='RIO_Wall' if edge.layer.name != 'RIO_Column'
+                }
+                column_face.vertices.each{|vert|
+                    offset_pts << vert.position.offset(Z_AXIS, wall_height)
+                }
+                prev_ents = Sketchup.active_model.entities.to_a
+                new_face = Sketchup.active_model.entities.add_face(offset_pts)
+                puts "new_face normal : #{new_face.normal}"
+                new_face.reverse! if new_face.normal.z < 0
+                new_face.pushpull -(wall_height-1.mm)
+                curr_ents = Sketchup.active_model.entities.to_a
+                puts "new_face normal after: #{new_face.normal}"
+                new_ents = curr_ents - prev_ents
+                column_group = Sketchup.active_model.entities.add_group(new_ents)
+                column_group.layer = Sketchup.active_model.layers['RIO_Civil_Column']
+                comp_inst = column_group.to_component
+                
+                #Set attributes
+                view_name = column_edge_arr[0].get_attribute(:rio_edge_atts, 'view_name') unless view_name
+                comp_inst.set_attribute(:rio_block_atts, 'corner_column_flag', corner_column_flag)
+                comp_inst.set_attribute(:rio_block_atts, 'block_type', 'column')
+                comp_inst.set_attribute(:rio_block_atts, 'view_name', view_name)
+                comp_inst.set_attribute(:rio_block_atts, 'edge_id', column_edge_arr[0].persistent_id)
+                comp_inst.set_attribute(:rio_block_atts, 'room_name', room_name)
+                comp_inst.set_attribute(:rio_block_atts, 'wall_block', 'true')
+                return comp_inst
+            end
+            return nil
+        end
+
     end
 end

@@ -1,5 +1,6 @@
 require 'singleton'
 require_relative '../features/CivilFeatures.rb'
+require_relative '../core/CivilHelper.rb'
 module RIO
 	module Tools
 		class UITools
@@ -64,6 +65,25 @@ module RIO
 					RIO::CivilHelper.remove_room_entities(params)
 				}
 				
+			end
+		end
+	end #module Tools
+
+	UI.add_context_menu_handler do |menu|
+		model = Sketchup.active_model
+		selection = model.selection[0]
+		if selection 
+			case selection
+			when Sketchup::Face
+				rbm = menu.add_submenu("Add RIO")
+				
+				rbm.add_item("Column"){ puts "column"}
+				rbm.add_item("Beam") { RIO::CivilHelper.create_beam(selection) }
+			when Sketchup::Group
+				puts "Group selected"
+			when Sketchup::ComponentInstance
+				comp_type = selection.get_attribute(:rio_block_atts, 'block_type')
+				puts "Comp type : #{comp_type}"	
 			end
 		end
 	end
