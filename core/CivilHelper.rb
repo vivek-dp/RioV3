@@ -429,6 +429,10 @@ module RIO
 
             puts "beam_wall_block : #{beam_wall_block} : #{beam_hit_found}"
             puts "beam_hit_found : #{beam_hit_found} at distance #{beam_length}"
+            unless beam_hit_found
+                puts "Cannot find the last end point for the beam. Could be possibly because the last hit element is not RIO Wall or column"
+                return false
+            end
             sel.add(beam_wall_block)
             sel.add(beam_hit_found)
             if beam_wall_block == beam_hit_found
@@ -511,6 +515,7 @@ module RIO
             entities_array = []
             entities_array << Sketchup.active_model.entities.select{|ent| ent.get_attribute(:rio_block_atts, 'room_name')==room_name}
             entities_array.flatten!
+            entities_array.uniq!
             entities_array
         end
 
@@ -547,6 +552,24 @@ module RIO
             return true
         end
         
+        def self.get_view_entities room_name
+            room_entities_a = get_room_entities room_name
+            view_hash = {}
+            room_entities_a.each { |ent|
+                room_view_name = ent.get_attribute(:rio_block_atts, 'view_name')
+                if room_view_name.is_a?(Array)
+                    room_view_name.each{ |vname|
+                        view_hash[vname] = [] unless view_hash.key?(vname)
+                        view_hash[vname] << ent
+                    }
+                else
+                    view_hash[room_view_name] = [] unless view_hash.key?(room_view_name)
+                    view_hash[room_view_name] << ent
+                end
+            }
+            view_hash
+        end
+
         # RIO::CivilHelper::find_last_hit_point fsel.center, X_AXIS, 'MBR'
         def self.find_last_hit_point input_pt, input_vector, room_name
             room_entities_a = get_room_entities room_name
@@ -630,6 +653,7 @@ module RIO
                 puts "c_edge : #{c_edge.layer.name}"
                 c_edge.layer=column_layer unless c_edge.layer.name=='RIO_Wall'
             }
+            manual_draw = false
 
             if column_face
                 column_edge_arr.select!{|edge| edge.layer.name=='RIO_Column'}
@@ -645,6 +669,7 @@ module RIO
                     puts "Room Face is : #{input_face}"
                     wall_height = input_face.get_attribute(:rio_atts, 'wall_height')
                     room_name   = input_face.get_attribute(:rio_atts, 'room_name')
+                    manual_draw = true
                 else
                     puts "The room face could not be found"
                     return false
@@ -780,6 +805,27 @@ module RIO
                 column_group = Sketchup.active_model.entities.add_group(new_ents)
                 column_group.layer = Sketchup.active_model.layers['RIO_Civil_Column']
                 comp_inst = column_group.to_component
+                
+                #Find view for manual draw
+                puts "manual : #{manual_draw}"
+                if manual_draw
+                    unless view_name
+                        puts "view_name : #{view_name} : #{view_name.nil?}"
+                        view_name  = []
+                        room_entities = get_room_entities room_name
+                        puts "room_entities : #{room_entities}"
+                        room_entities.select{|ent| ent.layer.name=='RIO_Civil_Wall'}.each { |room_ent|
+                            puts "Room ent : #{room_ent} : #{comp_inst.bounds.intersect(room_ent.bounds).diagonal}"
+                            if comp_inst.bounds.intersect(room_ent.bounds).diagonal > 0
+                                view_name << room_ent.get_attribute(:rio_block_atts, 'view_name') 
+                            end
+                        }
+                    end
+                    puts "view_name : #{view_name}"
+                    if view_name
+                        view_name = view_name[0] if view_name.length==1
+                    end
+                end
                 
                 #Set attributes
                 view_name = column_edge_arr[0].get_attribute(:rio_edge_atts, 'view_name') unless view_name
