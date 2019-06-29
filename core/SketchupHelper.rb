@@ -44,7 +44,11 @@ module RIO
         def self.get_current_entities
             Sketchup.active_model.entities.to_a
         end
-		
+        
+        def self.get_comp_pid id;
+            Sketchup.active_model.entities.each{|x| return x if x.persistent_id == id};
+            return nil;
+        end
 		
     end # SketchupHelper
 end # RIO

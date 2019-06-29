@@ -294,6 +294,8 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                 if door_edges.length > 0
                     door_edges.each{ |door_edge|
                         puts "Door : #{door_edge}"
+                        door_edge.set_attribute(:rio_block_atts, 'wall_height', wall_height)
+                        door_edge.set_attribute(:rio_block_atts, 'door_height', door_height)
                         create_door door_edge, @room_face, door_height, wall_height
                     }
                     puts "Room Doors created"
@@ -589,6 +591,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                     columns = []
                     column_edges = []
                     face_edges.each{ |f_edge|
+                        puts "f_edge : #{f_edge}"
                         if f_edge.layer.name == 'RIO_Column'
                             column_edges << f_edge
                         else
@@ -596,10 +599,15 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                             column_edges = []
                         end
                     }
+                    columns << column_edges unless column_edges.empty?
 
                     #puts "columns : #{columns.length} : #{columns}"
+                    #sel.clear
+                    #sel.add(columns)
                     columns.each { |column_edge_arr|
-                        comp_inst = create_single_column column_edge_arr 
+                        comp_inst = RIO::CivilHelper::create_single_column(column_edge_arr,
+                                                                    room_face: input_face,
+                                                                    wall_height: wall_height)
                         outer_columns << comp_inst if comp_inst
                     }
                 end

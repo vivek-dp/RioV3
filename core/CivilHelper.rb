@@ -1,4 +1,5 @@
 rioload_ruby '/core/SketchupHelper'
+rioload_ruby '/core/DirectionHelper'
 module RIO
     module CivilHelper
         def self.add_wall_corner_lines
@@ -240,7 +241,7 @@ module RIO
             floor_edges_arr = room_face.outer_loop.edges
             floor_edges_arr.length.times do
                 f_edge = floor_edges_arr[0]
-                puts "f_edge : #{f_edge.layer.name} : #{floor_edges_arr[1].layer.name}"
+                #puts "f_edge : #{f_edge.layer.name} : #{floor_edges_arr[1].layer.name}"
                 #Corner algo 1 : Check for perpendicular walls
                 if f_edge.layer.name == 'RIO_Wall'
                     next_edge = floor_edges_arr[1]
@@ -255,7 +256,7 @@ module RIO
                         end
                     end
                 end
-                puts "corner_found : #{corner_found}"
+                #puts "corner_found : #{corner_found}"
                 floor_edges_arr.rotate!
                 break if corner_found
             end
@@ -274,7 +275,7 @@ module RIO
                 break if floor_edges_arr.empty?
             end
             sel.add(floor_edges_arr)
-            puts "room : floor_edges_arr : #{floor_edges_arr}"
+            #puts "room : floor_edges_arr : #{floor_edges_arr}"
             room_views
         end #get_views
 
@@ -524,6 +525,7 @@ module RIO
                 puts "Room name cannot be empty"
                 return false
             end
+            puts "Func : remove_room_entities"
             puts "Room to be deleted : ++#{room_name}++"
             room_entities = get_room_entities(room_name)
             if room_entities.empty?
@@ -549,6 +551,17 @@ module RIO
                 Sketchup.active_model.entities.erase_entities(room_entities)
                 
             end
+            all_faces = Sketchup.active_model.entities.select{|ent| ent.is_a?(Sketchup::Face)}
+            room_faces = all_faces.select{|ent| ent.get_attribute(:rio_atts, 'room_name') == room_name}
+            room_faces.each{ |rface|          
+                rio_atts_dict = rface.attribute_dictionaries['rio_atts']
+                puts "Dict : #{rio_atts_dict}"
+                rio_atts_dict.keys.each {|key_name|
+                    puts "Key : #{key_name}"
+                    rface.delete_attribute 'rio_atts', key_name
+                }
+            }
+
             return true
         end
         
@@ -641,16 +654,19 @@ module RIO
         end
 
         
-        def self.create_single_column column_edge_arr, column_face=nil, wall_height=nil
-            puts "create_single_column": #{column_edge_arr}
+        def self.create_single_column (column_edge_arr, 
+                                        column_face: nil, 
+                                        wall_height: 3000.mm,
+                                        room_face: nil)
+            puts "create_single_column : #{column_edge_arr} : #{column_face}"
             intersect_pt 	    = nil
             corner_column_flag  = false
-            input_face          = @room_face
+            #input_face          = @room_face
             column_layer = Sketchup.active_model.layers['RIO_Column']
 
             
             column_edge_arr.each{|c_edge|
-                puts "c_edge : #{c_edge.layer.name}"
+                #puts "c_edge : #{c_edge.layer.name}"
                 c_edge.layer=column_layer unless c_edge.layer.name=='RIO_Wall'
             }
             manual_draw = false
@@ -661,14 +677,14 @@ module RIO
                     puts "col_edge.layer.name : #{col_edge.layer.name}"
                     if col_edge.layer.name == 'RIO_Column'
                         col_edge.faces.each{ |col_face|
-                            input_face = col_face if col_face.get_attribute(:rio_atts, 'room_name') 
+                        room_face = col_face if col_face.get_attribute(:rio_atts, 'room_name') 
                         }
                     end        
                 }
-                if input_face
-                    puts "Room Face is : #{input_face}"
-                    wall_height = input_face.get_attribute(:rio_atts, 'wall_height')
-                    room_name   = input_face.get_attribute(:rio_atts, 'room_name')
+                if room_face
+                    puts "Room Face is : #{room_face}"
+                    wall_height = room_face.get_attribute(:rio_atts, 'wall_height')
+                    
                     manual_draw = true
                 else
                     puts "The room face could not be found"
@@ -676,18 +692,20 @@ module RIO
                 end
             end
 
+            room_name   = room_face.get_attribute(:rio_atts, 'room_name')
+
             case column_edge_arr.length
             when 1
                 #Corner column with only one edge visible
                 column_edge = column_edge_arr[0]
-                adjacent_edges = CivilHelper::find_edges(column_edge_arr[0], input_face)
+                adjacent_edges = CivilHelper::find_edges(column_edge_arr[0], room_face)
                 intersect_pt = Geom.intersect_line_line(adjacent_edges[0].line, adjacent_edges[1].line)
                 col_verts = column_edge.vertices
                 column_face = Sketchup.active_model.entities.add_face(col_verts[0], col_verts[1], intersect_pt)
             when 2
                 adjacent_edges = []
                 column_edge_arr.each { |column_edge|
-                    adjacent_edges << CivilHelper::find_edges(column_edge, input_face)
+                    adjacent_edges << CivilHelper::find_edges(column_edge, room_face)
                 }
                 #puts "adj : #{adjacent_edges}"
                 adjacent_edges.flatten!; adjacent_edges.uniq!
@@ -744,7 +762,7 @@ module RIO
                 adjacent_edges = []
                 column_edge_arr.each { |column_edge|
                     if column_edge.layer.name == 'RIO_Column'
-                        adjacent_edges << CivilHelper::find_edges(column_edge, input_face)
+                        adjacent_edges << CivilHelper::find_edges(column_edge, room_face)
                     end
                 }
 
@@ -771,7 +789,7 @@ module RIO
                         }
                         faces = column_edge_arr[0].faces
                         column_edge_arr.each {|column_edge|
-                            faces = faces&(column_edge.faces-[input_face])
+                            faces = faces&(column_edge.faces-[room_face])
                         }
                         column_face = faces[0]
                     else
@@ -786,28 +804,33 @@ module RIO
                 column_edge.find_faces
             }
 
+            puts "column_face : #{column_face}"
+            
             if column_face
+                sel.clear
+                sel.add(column_face)
                 offset_pts = []
                 column_face.edges.each{ |edge|
                     edge.layer.name='RIO_Wall' if edge.layer.name != 'RIO_Column'
                 }
                 column_face.vertices.each{|vert|
+                    #puts "vert : #{vert} : #{vert.position} : #{wall_height}"
                     offset_pts << vert.position.offset(Z_AXIS, wall_height)
                 }
                 prev_ents = Sketchup.active_model.entities.to_a
                 new_face = Sketchup.active_model.entities.add_face(offset_pts)
-                puts "new_face normal : #{new_face.normal}"
+                #puts "new_face normal : #{new_face.normal}"
                 new_face.reverse! if new_face.normal.z < 0
                 new_face.pushpull -(wall_height-1.mm)
                 curr_ents = Sketchup.active_model.entities.to_a
-                puts "new_face normal after: #{new_face.normal}"
+                #puts "new_face normal after: #{new_face.normal}"
                 new_ents = curr_ents - prev_ents
                 column_group = Sketchup.active_model.entities.add_group(new_ents)
                 column_group.layer = Sketchup.active_model.layers['RIO_Civil_Column']
                 comp_inst = column_group.to_component
                 
                 #Find view for manual draw
-                puts "manual : #{manual_draw}"
+                #puts "manual : #{manual_draw}"
                 if manual_draw
                     unless view_name
                         puts "view_name : #{view_name} : #{view_name.nil?}"
@@ -827,6 +850,7 @@ module RIO
                     end
                 end
                 
+                sel.clear
                 #Set attributes
                 view_name = column_edge_arr[0].get_attribute(:rio_edge_atts, 'view_name') unless view_name
                 comp_inst.set_attribute(:rio_block_atts, 'corner_column_flag', corner_column_flag)
@@ -840,5 +864,132 @@ module RIO
             return nil
         end
 
+        def self.wall_comp_placement selected_wall, comp
+            unless selected_wall
+                puts "WALL PLACEMENT : Wall not properly selected"
+                return false
+            end
+            unless comp
+                puts "WALL PLACEMENT : component not properly selected"
+                return false
+            end
+            view_name = selected_wall.get_attribute(:rio_block_atts, 'view_name')
+            unless view_name
+                puts "WALL PLACEMENT : Wall doesnt have a view"
+                return false
+            end
+            room_name = selected_wall.get_attribute(:rio_block_atts, 'room_name')
+            unless room_name
+                puts "WALL PLACEMENT : Room name not available"
+            end
+            room_entities_a = get_view_entities room_name
+            view_entities   = room_entities_a[view_name]
+            if view_entities.nil? || view_entities.empty?
+                puts "WALL PLACEMENT : No entities available for this view"
+            end
+
+            return true
+        end 
+
+        #Input a fully created component and location
+        def self.place_component comp_defn, placement_type='manual', placement_location=nil
+            if comp_defn.nil?
+                puts "Component definition is mandatory"
+            end
+
+            case placement_type
+            when 'manual'
+                inst = Sketchup.active_model.entities.place_component defn
+            when 'wall'
+
+                #inst = 
+            end
+        end
+
+        def self.get_room_face room_name
+            all_faces = Sketchup.active_model.entities.select{|ent| ent.is_a?(Sketchup::Face)}
+            room_face = all_faces.select{|face_ent| face_ent.get_attribute(:rio_atts, 'room_name')==room_name}.sort_by!{|fc| fc.area}.first
+            room_face
+        end
+
+        def self.get_comp_pid persistent_id
+            Sketchup.active_model.entities.each{|x| return x if x.persistent_id == persistent_id};
+            return nil;
+        end
+
+        #To check the location of the entered value
+        def self.check_comp_location selected_wall, relative_distance, from_floor, wall_component
+            #Input checks
+            unless selected_wall
+                puts "WALL PLACEMENT : Wall not properly selected"
+                return false
+            end
+
+            # unless wall_component
+            #     puts "No Component selected"
+            #     return false
+            # end
+
+            unless relative_distance&&from_floor
+                puts "Distance from the corner and from the floor is required"
+                return false
+            end
+
+            view_name = selected_wall.get_attribute(:rio_block_atts, 'view_name')
+            unless view_name
+                puts "WALL PLACEMENT : Wall doesnt have a view"
+                return false
+            end
+
+            room_name = selected_wall.get_attribute(:rio_block_atts, 'room_name')
+            unless room_name
+                puts "WALL PLACEMENT : Room name not available"
+                return false
+            end
+
+            towards_wall_vector = selected_wall.get_attribute(:rio_block_atts, 'towards_wall_vector')
+            unless towards_wall_vector
+                puts "WALL PLACEMENT ; Towards wall vector not available"
+                return false
+            end
+
+            room_face = get_room_face(room_name)
+            unless room_face||room_face.is_a?(Sketchup::Face)
+                puts "Room face not found"
+                return false
+            end
+
+            room_entities_a = get_view_entities room_name
+            view_entities   = room_entities_a[view_name]
+            if view_entities.empty?
+                puts "No view entities found"
+                return false
+            end
+
+            sorted_entities, start_index    = RIO::DirectionHelper::sort_wall_items view_entities, towards_wall_vector
+            wall_start_point                = sorted_entities.first.bounds.corner(start_index)
+
+
+            start_pt    = selected_wall.get_attribute(:rio_block_atts, 'start_point')
+            end_pt      = selected_wall.get_attribute(:rio_block_atts, 'end_point')
+            wall_directional_vector = start_pt.vector_to end_pt
+
+            offset_point    = wall_start_point.offset(wall_directional_vector, relative_distance)
+            offset_point.z  = from_floor 
+
+            # wall_trans = selected_wall.transformation
+            # wall_component.transform!(wall_trans)
+
+            return offset_point
+            # wall_rotz = .rotz
+            # puts "wall rotation : #{wall_rotz}"
+            # case wall_rotz
+            # when 0..90
+
+            # when 90.180
+            # when 180..270
+            # else
+            # when 
+        end
     end
 end

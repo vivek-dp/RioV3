@@ -8,11 +8,11 @@ module RIO
 			@@rio_dialog = nil
 			
 			def initialize
-				@dialog_width = 400
-				@dialog_height = 650
-				@dialog_url = 'E:/V3/Working/tools/tools_main.html'
-				@style_window = UI::HtmlDialog::STYLE_WINDOW
-				@style_dialog = UI::HtmlDialog::STYLE_DIALOG
+				@dialog_width 	= 400
+				@dialog_height 	= 650
+				@dialog_url 	= RIO_ROOT_PATH + 'tools/tools_main.html'
+				@style_window 	= UI::HtmlDialog::STYLE_WINDOW
+				@style_dialog 	= UI::HtmlDialog::STYLE_DIALOG
 			end
 			
 			def get_params_from_string param_str
@@ -69,21 +69,49 @@ module RIO
 		end
 	end #module Tools
 
+	def self.get_wall_location
+		dialog_url 		= RIO_ROOT_PATH + 'tools/wall_location.html' 
+		dialog_inputs_h = { :title		=>'Enter wall location',
+							:scrollable	=>false,
+							:resizable	=>false,
+							:width 		=>400,
+							:height		=>600
+							#:style		=>UI::HtmlDialog::STYLE_DIALOG
+						}
+		wall_location_dialog = UI::HtmlDialog.new(dialog_inputs_h)
+		wall_location_dialog.add_action_callback("sendWallLocation") { |dialog, params|
+			puts "params : #{params}"
+		}
+		wall_location_dialog.set_url(dialog_url);
+		wall_location_dialog.show();
+	end
+	
 	UI.add_context_menu_handler do |menu|
 		model = Sketchup.active_model
 		selection = model.selection[0]
 		if selection 
 			case selection
 			when Sketchup::Face
-				rbm = menu.add_submenu("Add RIO")
+				# rbm = menu.add_submenu("Add RIO")
 				
-				rbm.add_item("Column"){ puts "column"}
-				rbm.add_item("Beam") { RIO::CivilHelper.create_beam(selection) }
+				# rbm.add_item("Column"){ puts "column"}
+				# rbm.add_item("Beam") { RIO::CivilHelper.create_beam(selection) }
 			when Sketchup::Group
 				puts "Group selected"
 			when Sketchup::ComponentInstance
 				comp_type = selection.get_attribute(:rio_block_atts, 'block_type')
 				puts "Comp type : #{comp_type}"	
+				case comp_type
+				when 'wall'
+					menu.add_item("Fix Rio Component") {
+						wall_location = get_wall_location
+		
+						if wall_location
+							proceed_flag = RIO::CivilHelper::check_comp_location(selection, wall_location)
+						end
+					}
+				else
+				end
 			end
 		end
 	end
