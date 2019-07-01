@@ -49,6 +49,12 @@ module RIO
             Sketchup.active_model.entities.each{|x| return x if x.persistent_id == id};
             return nil;
         end
+
+        def self.check_params
+            #Link : https://stackoverflow.com/questions/9211813/is-there-a-way-to-access-method-arguments-in-ruby
+            args = method(__method__).parameters.map { |arg| arg[1].to_s }
+            logger.error "Method failed with " + args.map { |arg| "#{arg} = #{eval arg}" }.join(', ')
+        end
 		
     end # SketchupHelper
 end # RIO

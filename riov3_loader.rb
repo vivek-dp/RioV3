@@ -43,6 +43,13 @@ def a3
 	end
 end
 
+def set_global_rio_dictionary
+	model_dictionaries = Sketchup.active_model.attribute_dictionaries
+	rio_attribute_dictionary = model_dictionaries['rio_model_atts']
+	unless rio_attribute_dictionary
+		model_dictionaries.add
+	end
+end
 
 def load_layers
     ['RIO_Component', 'RIO_Wall', 'RIO_Door', 'RIO_Window', 'RIO_Column', 'RIO_Beam'].each {|layer_name|

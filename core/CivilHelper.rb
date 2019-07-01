@@ -766,7 +766,7 @@ module RIO
                     end
                 }
 
-                puts "adjacent edges : #{adjacent_edges}"
+                #puts "adjacent edges : #{adjacent_edges}"
                 if adjacent_edges
                     adjacent_edges.flatten!; adjacent_edges.uniq!
                     puts "post adjacent edges : #{adjacent_edges}"
@@ -804,7 +804,7 @@ module RIO
                 column_edge.find_faces
             }
 
-            puts "column_face : #{column_face}"
+            #puts "column_face : #{column_face}"
             
             if column_face
                 sel.clear
@@ -833,18 +833,18 @@ module RIO
                 #puts "manual : #{manual_draw}"
                 if manual_draw
                     unless view_name
-                        puts "view_name : #{view_name} : #{view_name.nil?}"
+                        #puts "view_name : #{view_name} : #{view_name.nil?}"
                         view_name  = []
                         room_entities = get_room_entities room_name
-                        puts "room_entities : #{room_entities}"
+                        #puts "room_entities : #{room_entities}"
                         room_entities.select{|ent| ent.layer.name=='RIO_Civil_Wall'}.each { |room_ent|
-                            puts "Room ent : #{room_ent} : #{comp_inst.bounds.intersect(room_ent.bounds).diagonal}"
+                            #puts "Room ent : #{room_ent} : #{comp_inst.bounds.intersect(room_ent.bounds).diagonal}"
                             if comp_inst.bounds.intersect(room_ent.bounds).diagonal > 0
                                 view_name << room_ent.get_attribute(:rio_block_atts, 'view_name') 
                             end
                         }
                     end
-                    puts "view_name : #{view_name}"
+                    #puts "view_name : #{view_name}"
                     if view_name
                         view_name = view_name[0] if view_name.length==1
                     end
@@ -899,10 +899,44 @@ module RIO
 
             case placement_type
             when 'manual'
-                inst = Sketchup.active_model.entities.place_component defn
+                inst = Sketchup.active_model.entities.place_component comp_defn
             when 'wall'
+                wall_offset_point   = Sketchup.active_model.get_attribute(:rio_atts, 'wall_offset_pt')
+                movement_vector     = Sketchup.active_model.get_attribute(:rio_atts, 'movement_vector')
+                wall_side           = Sketchup.active_model.get_attribute(:rio_atts, 'wall_side')
 
-                #inst = 
+                unless wall_offset_point
+                    puts "Wall offset point not found"
+                    return false
+                end  
+                wall_trans = $rio_wall_trans
+                unless wall_trans
+                    puts "Wall transformation is missing"
+                    return false
+                end
+
+                puts "Wall offset point : #{wall_offset_point} : #{wall_trans}"
+                #comp_inst = Sketchup.active_model.active_entities.add_instance(comp_defn, wall_trans)
+
+                temp_inst       = Sketchup.active_model.active_entities.add_instance comp_defn, ORIGIN
+                move_distance   = temp_inst.bounds.height
+                comp_width      = temp_inst.bounds.width
+                Sketchup.active_model.entities.erase_entities temp_inst
+
+                wall_vector     = Sketchup.active_model.get_attribute :rio_atts, 'wall_vector'
+                puts "wall_offset_point : #{wall_offset_point}"
+                if wall_side=='right'
+                    wall_offset_point.offset!(wall_vector.reverse, comp_width)
+                end
+                puts "right wall_offset_point : #{wall_offset_point}"
+
+                tr      = Geom::Transformation.rotation([0, 0, 0], Z_AXIS, wall_trans.rotz.degrees)
+                comp_inst    = Sketchup.active_model.active_entities.add_instance comp_defn, tr
+                
+                puts "movement_vector : #{movement_vector} : #{move_distance}"
+                placement_point = wall_offset_point.offset(movement_vector, move_distance)
+                comp_placement_trans = Geom::Transformation.new(placement_point)
+                comp_inst.transform!(comp_placement_trans) 
             end
         end
 
@@ -918,7 +952,10 @@ module RIO
         end
 
         #To check the location of the entered value
-        def self.check_comp_location selected_wall, relative_distance, from_floor, wall_component
+        def self.get_comp_location selected_wall, relative_distance, from_floor, from_side='left'
+            args = method(__method__).parameters.map { |arg| arg[1].to_s }
+            puts args.map { |arg| "#{arg} = #{eval arg}" }.join(', ')
+
             #Input checks
             unless selected_wall
                 puts "WALL PLACEMENT : Wall not properly selected"
@@ -966,30 +1003,18 @@ module RIO
                 return false
             end
 
-            sorted_entities, start_index    = RIO::DirectionHelper::sort_wall_items view_entities, towards_wall_vector
+            sorted_entities, start_index    = RIO::DirectionHelper::sort_wall_items view_entities, towards_wall_vector, from_side
             wall_start_point                = sorted_entities.first.bounds.corner(start_index)
 
 
             start_pt    = selected_wall.get_attribute(:rio_block_atts, 'start_point')
             end_pt      = selected_wall.get_attribute(:rio_block_atts, 'end_point')
             wall_directional_vector = start_pt.vector_to end_pt
+            wall_directional_vector.reverse! if from_side=="right"
 
             offset_point    = wall_start_point.offset(wall_directional_vector, relative_distance)
             offset_point.z  = from_floor 
-
-            # wall_trans = selected_wall.transformation
-            # wall_component.transform!(wall_trans)
-
             return offset_point
-            # wall_rotz = .rotz
-            # puts "wall rotation : #{wall_rotz}"
-            # case wall_rotz
-            # when 0..90
-
-            # when 90.180
-            # when 180..270
-            # else
-            # when 
         end
     end
 end

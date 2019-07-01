@@ -80,7 +80,37 @@ module RIO
 						}
 		wall_location_dialog = UI::HtmlDialog.new(dialog_inputs_h)
 		wall_location_dialog.add_action_callback("sendWallLocation") { |dialog, params|
-			puts "params : #{params}"
+			inputs = params.split(',')
+			from_wall 	= inputs[0].to_f.mm
+			wall_side 	= inputs[1]
+			from_floor 	= inputs[2].to_f.mm
+			
+			wall_selected = Sketchup.active_model.selection[0]
+			towards_wall_v = wall_selected.get_attribute :rio_block_atts, 'towards_wall_vector' 
+			
+			#Get the wall vector			
+			start_pt 	= wall_selected.get_attribute :rio_block_atts, 'start_point'
+			end_pt 		= wall_selected.get_attribute :rio_block_atts, 'end_point'
+			wall_vector = start_pt.vector_to(end_pt)
+			
+			wall_offset_point = RIO::CivilHelper::get_comp_location wall_selected, from_wall, from_floor , wall_side
+			active_model = Sketchup.active_model
+			active_model.set_attribute :rio_atts, 'wall_offset_pt', wall_offset_point
+			active_model.set_attribute :rio_atts, 'movement_vector', towards_wall_v
+			active_model.set_attribute :rio_atts, 'wall_id', wall_selected.persistent_id
+			active_model.set_attribute :rio_atts, 'wall_side', wall_side
+			active_model.set_attribute :rio_atts, 'wall_vector', wall_vector
+			
+			$rio_wall_trans = wall_selected.transformation
+			
+			puts "The start point is : #{from_wall} : #{from_floor} : #{wall_offset_point}"
+			
+			if true #only for the civil 
+				carcass_path 	= File.join(RIO_ROOT_PATH, 'assets/BC_800.skp')
+				defn 			= Sketchup.active_model.definitions.load(carcass_path)
+				
+				RIO::CivilHelper::place_component defn, 'wall'
+			end
 		}
 		wall_location_dialog.set_url(dialog_url);
 		wall_location_dialog.show();
@@ -104,11 +134,7 @@ module RIO
 				case comp_type
 				when 'wall'
 					menu.add_item("Fix Rio Component") {
-						wall_location = get_wall_location
-		
-						if wall_location
-							proceed_flag = RIO::CivilHelper::check_comp_location(selection, wall_location)
-						end
+						get_wall_location
 					}
 				else
 				end

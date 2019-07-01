@@ -572,7 +572,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
 
             def create_columns input_face, wall_height
                 #input_face = fsel
-                puts "Input face : #{input_face}"
+                puts "Create Column : #{input_face} : #{wall_height}"
 
                 Sketchup.active_model.layers.add('RIO_Civil_Column') if Sketchup.active_model.layers['RIO_Civil_Column'].nil?
 
@@ -591,7 +591,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                     columns = []
                     column_edges = []
                     face_edges.each{ |f_edge|
-                        puts "f_edge : #{f_edge}"
+                        #puts "f_edge : #{f_edge}"
                         if f_edge.layer.name == 'RIO_Column'
                             column_edges << f_edge
                         else
