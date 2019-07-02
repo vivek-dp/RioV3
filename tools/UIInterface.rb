@@ -85,7 +85,20 @@ module RIO
 			wall_side 	= inputs[1]
 			from_floor 	= inputs[2].to_f.mm
 			
+			puts "sendWallLocation : #{inputs}"
+			
 			wall_selected = Sketchup.active_model.selection[0]
+			unless wall_selected
+				UI.messagebox "Nothing selected. Please select a wall."
+				return false
+			end
+			
+			block_type = wall_selected.get_attribute :rio_block_atts, 'block_type'
+			unless block_type=='wall'
+				UI.messagebox "Selection is not a wall"
+				return false
+			end
+			
 			towards_wall_v = wall_selected.get_attribute :rio_block_atts, 'towards_wall_vector' 
 			
 			#Get the wall vector			
@@ -95,11 +108,16 @@ module RIO
 			
 			wall_offset_point = RIO::CivilHelper::get_comp_location wall_selected, from_wall, from_floor , wall_side
 			active_model = Sketchup.active_model
+
+			active_model.set_attribute :rio_atts, 'room_name', wall_selected.get_attribute(:rio_block_atts, 'room_name')
 			active_model.set_attribute :rio_atts, 'wall_offset_pt', wall_offset_point
 			active_model.set_attribute :rio_atts, 'movement_vector', towards_wall_v
 			active_model.set_attribute :rio_atts, 'wall_id', wall_selected.persistent_id
 			active_model.set_attribute :rio_atts, 'wall_side', wall_side
 			active_model.set_attribute :rio_atts, 'wall_vector', wall_vector
+			active_model.set_attribute :rio_atts, 'wall_height', wall_selected.get_attribute(:rio_block_atts, 'wall_height')
+			active_model.set_attribute :rio_atts, 'from_wall', from_wall
+			active_model.set_attribute :rio_atts, 'from_floor', from_floor
 			
 			$rio_wall_trans = wall_selected.transformation
 			
@@ -122,10 +140,10 @@ module RIO
 		if selection 
 			case selection
 			when Sketchup::Face
-				# rbm = menu.add_submenu("Add RIO")
+				rbm = menu.add_submenu("Add RIO Comp-->")
 				
-				# rbm.add_item("Column"){ puts "column"}
-				# rbm.add_item("Beam") { RIO::CivilHelper.create_beam(selection) }
+				#rbm.add_item("Column"){ puts "column"}
+				rbm.add_item("Beam") { RIO::CivilHelper.create_beam(selection) }
 			when Sketchup::Group
 				puts "Group selected"
 			when Sketchup::ComponentInstance

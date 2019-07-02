@@ -189,6 +189,8 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                 @window_offset  = params[:window_offset].to_f if params[:window_offset]
                 @wall_color     = params[:wall_color].nil? ? 'white' : params[:wall_color]
 
+                Sketchup.active_model.set_attribute(:rio_atts, 'last_room_wall_height', @wall_height)
+
                 @room_face      = Sketchup.active_model.selection[0]
                 if @room_face.is_a?(Sketchup::Face)
                     @room_face.set_attribute(:rio_atts, 'room_name', @room_name)
@@ -373,6 +375,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                 room_name = view_name.split('_V_')[0]
                 towards_wall_vector = CivilHelper::check_edge_vector door_edge, @room_face
 
+                door_wall_inst.set_attribute(:rio_block_atts, 'entity_width', entity_width)
                 door_wall_inst.set_attribute(:rio_block_atts, 'wall_type', 'door_wall')
                 door_wall_inst.set_attribute(:rio_block_atts, 'edge_id', door_edge.persistent_id)
                 door_wall_inst.set_attribute(:rio_block_atts, 'view_name', view_name)
@@ -476,7 +479,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                 
                 add_real_window = true
                 if add_real_window
-                    puts "add_real_door"
+                    puts "add_real_ window"
                     window_skp = RIO_ROOT_PATH+'/assets/samples/Window.skp'
                     window_defn = Sketchup.active_model.definitions.load(window_skp)
 
@@ -526,7 +529,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                         window_face_arr = CivilHelper::find_adj_window_face [window_face]
                         external_face = window_face_arr.last
                         external_edge = external_face.edges.select{|ed| ed.faces.length == 1}[0]
-                        if external_edge.layer.name == 'RIO_Window'
+                        if external_edge && external_edge.layer.name == 'RIO_Window'
                             puts "Its an external window. So, Adding the wall for the external edge."
                             clockwise 	= CivilHelper::check_clockwise_edge external_edge, external_face
                             verts 		= external_edge.vertices

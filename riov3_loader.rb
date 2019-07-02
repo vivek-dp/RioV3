@@ -64,5 +64,6 @@ def load_layers
     }
 end
 
+load_layers
 RIO::DevTools::load_menu_items
 RIO::DevTools::load_utilities

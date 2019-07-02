@@ -2,6 +2,7 @@ rioload_ruby '/core/SketchupHelper'
 rioload_ruby '/core/DirectionHelper'
 module RIO
     module CivilHelper
+
         def self.add_wall_corner_lines
             model 	    = Sketchup.active_model
             wall_layer  = model.layers['RIO_Wall']
@@ -512,9 +513,17 @@ module RIO
             end
         end
 
-        def self.get_room_entities room_name
+        def self.get_room_civil_entities room_name
             entities_array = []
             entities_array << Sketchup.active_model.entities.select{|ent| ent.get_attribute(:rio_block_atts, 'room_name')==room_name}
+            entities_array.flatten!
+            entities_array.uniq!
+            entities_array
+        end
+
+        def self.get_room_comp_entities room_name
+            entities_array = []
+            entities_array << Sketchup.active_model.entities.select{|ent| ent.get_attribute(:rio_comp_atts, 'room_name')==room_name}
             entities_array.flatten!
             entities_array.uniq!
             entities_array
@@ -527,8 +536,10 @@ module RIO
             end
             puts "Func : remove_room_entities"
             puts "Room to be deleted : ++#{room_name}++"
-            room_entities = get_room_entities(room_name)
-            if room_entities.empty?
+            room_entities = get_room_civil_entities(room_name)
+            comp_entities = get_room_comp_entities(room_name)
+
+            if room_entities.empty? && comp_entities.empty?
                 puts "Nothing to remove"
             else
                 wall_entities   = room_entities.select{|ent| ent.get_attribute(:rio_block_atts, 'block_type')=='wall'}
@@ -547,10 +558,14 @@ module RIO
                 puts "Beam                      : #{beam_entities.length}"
                 puts "Face                      : #{face_entities.length}"
                 puts "Edge                      : #{edge_entities.length}"
-                puts "#{room_entities.length} #{room_name} entities have been deleted"
+                puts "Civil : #{room_entities.length} #{room_name} entities have been deleted"
+                if !comp_entities.empty?
+                    puts "Components : #{comp_entities.length} #{room_name} rio components have been deleted"
+                    Sketchup.active_model.entities.erase_entities(comp_entities)
+                end
                 Sketchup.active_model.entities.erase_entities(room_entities)
-                
             end
+
             all_faces = Sketchup.active_model.entities.select{|ent| ent.is_a?(Sketchup::Face)}
             room_faces = all_faces.select{|ent| ent.get_attribute(:rio_atts, 'room_name') == room_name}
             room_faces.each{ |rface|          
@@ -566,7 +581,7 @@ module RIO
         end
         
         def self.get_view_entities room_name
-            room_entities_a = get_room_entities room_name
+            room_entities_a = get_room_civil_entities room_name
             view_hash = {}
             room_entities_a.each { |ent|
                 room_view_name = ent.get_attribute(:rio_block_atts, 'view_name')
@@ -585,7 +600,7 @@ module RIO
 
         # RIO::CivilHelper::find_last_hit_point fsel.center, X_AXIS, 'MBR'
         def self.find_last_hit_point input_pt, input_vector, room_name
-            room_entities_a = get_room_entities room_name
+            room_entities_a = get_room_civil_entities room_name
             continue_raytest = true
             count = 1 #Just to avoid infinite loop
             allowed_intersections = ['column', 'wall']
@@ -632,25 +647,39 @@ module RIO
             end
         end
 
+        def self.get_outer_walls
+            outer_layers = ['RIO_Wall', 'RIO_Window']
+            wall_edges 	= Sketchup.active_model.entities.grep(Sketchup::Edge).select{|edge| outer_layers.include?(edge.layer.name)} 
+            walls 		= wall_edges.select{|x| x.faces.length == 1}
+            walls
+        end
+
         def self.perimeter_wall
             outer_walls = get_outer_walls
             wall_width 	= 30.mm 
-            outer_walls.each { |wall_edge|
-                verts = wall_edge.vertices
-                
-                clockwise = check_clockwise_edge wall_edge, wall_edge.faces[0]
-                if clockwise
-                    pt1, pt2 = verts[0].position, verts[1].position
-                else
-                    pt1, pt2 = verts[1].position, verts[0].position
-                end
-                if wall_edge.layer.name == 'RIO_Wall'
-                    wall_inst = CivilHelper::place_cuboidal_component(pt2, pt1, comp_height: WALL_HEIGHT, comp_width: wall_width)
-                elsif wall_edge.layer.name == 'RIO_Window'
-                    #create_window window_edge, room_face, window_height, window_offset, wall_height
-                end
+            wall_height = Sketchup.active_model.get_attribute(:rio_atts, 'last_room_wall_height')
+            if wall_height
+                outer_walls.each { |wall_edge|
+                    verts = wall_edge.vertices
+                    
+                    clockwise = check_clockwise_edge wall_edge, wall_edge.faces[0]
+                    if clockwise
+                        pt1, pt2 = verts[0].position, verts[1].position
+                    else
+                        pt1, pt2 = verts[1].position, verts[0].position
+                    end
+                    if wall_edge.layer.name == 'RIO_Wall'
+                        wall_inst = CivilHelper::place_cuboidal_component(pt2, pt1, comp_height: wall_height, comp_width: wall_width)
+                    elsif wall_edge.layer.name == 'RIO_Window'
+                        #create_window window_edge, room_face, window_height, window_offset, wall_height
+                    end
 
-            }
+                }
+                return true
+            else
+                puts "Perimeter wall could not be done. Wall height not found"
+                return false
+            end
         end
 
         
@@ -835,7 +864,7 @@ module RIO
                     unless view_name
                         #puts "view_name : #{view_name} : #{view_name.nil?}"
                         view_name  = []
-                        room_entities = get_room_entities room_name
+                        room_entities = get_room_civil_entities room_name
                         #puts "room_entities : #{room_entities}"
                         room_entities.select{|ent| ent.layer.name=='RIO_Civil_Wall'}.each { |room_ent|
                             #puts "Room ent : #{room_ent} : #{comp_inst.bounds.intersect(room_ent.bounds).diagonal}"
@@ -891,6 +920,115 @@ module RIO
             return true
         end 
 
+        def self.check_door_windows comp_inst, room_name
+            model = Sketchup.active_model
+            wall_id = model.get_attribute :rio_atts, 'wall_id'
+            wall_component = get_comp_pid(wall_id)
+            if wall_component
+                view_name = wall_component.get_attribute(:rio_block_atts, 'view_name')
+                civil_entities = get_view_entities room_name
+                puts "view_ocmp : #{civil_entities} : #{view_name}"
+                view_entities   = civil_entities[view_name]
+                door_entities = view_entities.select{|view_ent| view_ent.get_attribute(:rio_block_atts, 'block_type') == 'wall'}
+                comp_facing_vector = wall_component.get_attribute(:rio_block_atts, 'towards_wall_vector')
+                
+                cbounds = comp_inst.bounds
+                corners = RIO::DirectionHelper::get_component_corners(comp_inst)
+                back_center =  Geom.linear_combination(0.5, cbounds.corner(corners[3]), 0.5, cbounds.corner(corners[6]))
+                back_corners = [
+                                    back_center,
+                                    cbounds.corner(corners[2]), 
+                                    cbounds.corner(corners[3]),
+                                    cbounds.corner(corners[6]),
+                                    cbounds.corner(corners[7])
+                                ]
+                back_corners.each{|comp_pt|
+                    hit_item = model.raytest(comp_pt, comp_facing_vector.reverse)
+                    puts "hit_item : #{hit_item}"
+                    if hit_item 
+                        hit_comp = hit_item[1][0]
+                        if hit_comp.is_a?(Sketchup::ComponentInstance)
+                            sel.add(hit_comp)
+                            puts "id : #{hit_comp.persistent_id}"
+                            block_type = hit_comp.get_attribute(:rio_block_atts, 'block_type')
+                            puts "Hit entity : #{hit_item[1][0]} : #{block_type}"
+                            if block_type=="window"
+                                UI.messagebox "Window behind the component"
+                                Sketchup.active_model.entities.erase_entities comp_inst
+                                sel.add(hit_comp)
+                                return false
+                            elsif block_type=="door"
+                                UI.messagebox "Door behind the component."
+                                Sketchup.active_model.entities.erase_entities comp_inst
+                                sel.add(hit_comp)
+                                return false
+                            end
+                        end
+                    end
+                }                              
+            else
+                puts "Wall component not found. Door & window check could not be done. Please do manual check."
+                return false
+            end
+            return true
+        end
+
+        #Check if the component is properly placed
+        def self.check_component_placement comp_inst, room_name
+            args = method(__method__).parameters.map { |arg| arg[1].to_s }
+            puts args.map { |arg| "#{arg} = #{eval arg}" }.join(', ')
+
+            room_entities   = get_room_civil_entities(room_name)
+            comp_entities   = get_room_comp_entities(room_name)
+
+            comp_bounds = comp_inst.bounds
+            room_entities.each{ |room_entity|
+                intersect_bounds = comp_bounds.intersect(room_entity.bounds)
+                puts "intersect_bounds.diagonal : #{intersect_bounds.diagonal}"
+                if intersect_bounds.diagonal > 0.mm
+                    intersect_volume = intersect_bounds.width * intersect_bounds.depth * intersect_bounds.height
+                    puts "intersect_volume : #{intersect_volume}"
+                    if intersect_volume > 1.mm
+                        sel.clear
+                        entity_type = room_entity.get_attribute(:rio_block_atts, 'block_type')
+                        UI.messagebox "Component Overlaps this #{entity_type}"
+                        Sketchup.active_model.entities.erase_entities comp_inst
+                        sel.add(room_entity)
+                        return false
+                    end
+                end
+            }
+
+            puts "Not intersecting with any civil components"
+            
+            if !comp_entities.empty?
+                comp_entities = comp_entities-[comp_inst]
+                puts "comp_entities : #{comp_entities}"
+                comp_entities.each{ |comp_entity|
+                    intersect_bounds = comp_bounds.intersect(comp_entity.bounds)
+                    puts "Comp : intersect_bounds.diagonal : #{intersect_bounds.diagonal} : #{comp_entity}"
+                    if intersect_bounds.diagonal > 0.mm
+                        intersect_volume = intersect_bounds.width * intersect_bounds.depth * intersect_bounds.height
+                        puts "intersect_volume : #{intersect_volume}"
+                        if intersect_volume > 1.mm
+                            sel.clear
+                            UI.messagebox "New Component Overlaps the selected component"
+                            Sketchup.active_model.entities.erase_entities comp_inst
+                            sel.add(comp_entity)
+                            return false
+                        end
+                    end
+                }
+            end
+
+            puts "Not intersecting with any RIO components"
+
+            puts "Checking doors and windows...."
+            door_window_flag = check_door_windows(comp_inst, room_name)
+            puts "Dors window : #{door_window_flag}"
+            return door_window_flag
+        end
+        
         #Input a fully created component and location
         def self.place_component comp_defn, placement_type='manual', placement_location=nil
             if comp_defn.nil?
@@ -901,9 +1039,15 @@ module RIO
             when 'manual'
                 inst = Sketchup.active_model.entities.place_component comp_defn
             when 'wall'
-                wall_offset_point   = Sketchup.active_model.get_attribute(:rio_atts, 'wall_offset_pt')
-                movement_vector     = Sketchup.active_model.get_attribute(:rio_atts, 'movement_vector')
-                wall_side           = Sketchup.active_model.get_attribute(:rio_atts, 'wall_side')
+                model               = Sketchup.active_model
+                wall_offset_point   = model.get_attribute(:rio_atts, 'wall_offset_pt')
+                movement_vector     = model.get_attribute(:rio_atts, 'movement_vector')
+                wall_side           = model.get_attribute(:rio_atts, 'wall_side')
+                room_name           = model.get_attribute(:rio_atts, 'room_name')
+                wall_height         = model.get_attribute(:rio_atts, 'wall_height')
+                from_floor          = model.get_attribute(:rio_atts, 'from_floor')
+                wall_id             = model.get_attribute(:rio_atts, 'wall_id')
+
 
                 unless wall_offset_point
                     puts "Wall offset point not found"
@@ -921,8 +1065,14 @@ module RIO
                 temp_inst       = Sketchup.active_model.active_entities.add_instance comp_defn, ORIGIN
                 move_distance   = temp_inst.bounds.height
                 comp_width      = temp_inst.bounds.width
+                comp_height     = temp_inst.bounds.depth
                 Sketchup.active_model.entities.erase_entities temp_inst
 
+                comp_top = from_floor+comp_height
+                if comp_top>wall_height
+                    UI.messagebox "Placing the component at this height will hit the ceiling"
+                    return false
+                end
                 wall_vector     = Sketchup.active_model.get_attribute :rio_atts, 'wall_vector'
                 puts "wall_offset_point : #{wall_offset_point}"
                 if wall_side=='right'
@@ -937,6 +1087,15 @@ module RIO
                 placement_point = wall_offset_point.offset(movement_vector, move_distance)
                 comp_placement_trans = Geom::Transformation.new(placement_point)
                 comp_inst.transform!(comp_placement_trans) 
+
+                comp_inst.set_attribute(:rio_comp_atts, 'room_name', room_name)
+                comp_inst.set_attribute(:rio_comp_atts, 'wall_id', wall_id)
+                #comp_inst.set_attribute(:rio_comp_atts, '', )
+
+                comp_flag = check_component_placement(comp_inst, room_name)
+                if comp_flag
+                    puts "Component placed successfully"
+                end
             end
         end
 
@@ -1004,9 +1163,16 @@ module RIO
             end
 
             sorted_entities, start_index    = RIO::DirectionHelper::sort_wall_items view_entities, towards_wall_vector, from_side
-            wall_start_point                = sorted_entities.first.bounds.corner(start_index)
+            first_entity = sorted_entities.first
 
-
+            wall_start_point                = first_entity.bounds.corner(start_index)
+            puts first_entity.persistent_id
+            puts "att_type : #{first_entity.get_attribute(:rio_block_atts, 'wall_type')}"
+            if first_entity.get_attribute(:rio_block_atts, 'wall_type') == 'door_wall'
+                wall_width = first_entity.get_attribute(:rio_block_atts, 'entity_width')
+                puts "wall_width : #{wall_width}"
+                #wall_start_point.offset!(towards_wall_vector, wall_width)
+            end
             start_pt    = selected_wall.get_attribute(:rio_block_atts, 'start_point')
             end_pt      = selected_wall.get_attribute(:rio_block_atts, 'end_point')
             wall_directional_vector = start_pt.vector_to end_pt

@@ -18,7 +18,7 @@ module RIO
 			end
 			origin = entity.transformation.origin
 		end
-
+ 
 		def self.rotate_item entity, rotate_axis=Z_AXIS, angle=90
 			point = entity.bounds.center
 			angle = angle.degrees
@@ -122,8 +122,11 @@ module RIO
 				puts "No entities passed to sort."
 				return false
 			end
+			
+			allowed_ents = ['wall', 'beam', 'column']
+			entities.select!{|ent| allowed_ents.include?(ent.get_attribute(:rio_block_atts, 'block_type'))}
 
-			direction=(wall_side=='left')?'cw':'acw'
+			direction=(wall_side=="left") ? "cw":"acw"
 			x_sort_flag, y_sort_flag, vector_type, corner_index, start_index = get_sort_params(wall_facing_vector, direction)
 
 			puts "flags : #{x_sort_flag} : #{y_sort_flag} : #{vector_type} : #{direction}"
@@ -145,7 +148,7 @@ module RIO
 			end
 			first_entity = sorted_entities.first
 			bl_type = first_entity.get_attribute(:rio_block_atts, 'block_type')
-
+			
 			if bl_type=='wall'
 				case vector_type
 				when 1
@@ -173,6 +176,21 @@ module RIO
 			return sorted_entities, start_index
 		end
 
-
+		def self.get_component_corners icomponent
+			if icomponent && icomponent.is_a?(Sketchup::ComponentInstance)
+				comp_rotz = icomponent.transformation.rotz
+				case comp_rotz
+				when 0..89
+					corners = [0,1,3,2,4,5,7,6]
+				when 90..179
+					corners = [1,3,2,0,5,7,6,4]
+				when 180..269
+					corners = [3,2,0,1,7,6,4,5]
+				else
+					corners = [2,0,1,3,6,4,5,7]
+				end
+				return corners
+			end
+		end
 	end 
 end
