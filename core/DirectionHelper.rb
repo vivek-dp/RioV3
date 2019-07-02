@@ -179,15 +179,29 @@ module RIO
 		def self.get_component_corners icomponent
 			if icomponent && icomponent.is_a?(Sketchup::ComponentInstance)
 				comp_rotz = icomponent.transformation.rotz
-				case comp_rotz
-				when 0..89
-					corners = [0,1,3,2,4,5,7,6]
-				when 90..179
-					corners = [1,3,2,0,5,7,6,4]
-				when 180..269
-					corners = [3,2,0,1,7,6,4,5]
+				if comp_rotz >= 0
+					case comp_rotz
+					when 0..89
+						corners = [0,1,3,2,4,5,7,6]
+					when 90..179
+						corners = [1,3,2,0,5,7,6,4]
+					when 180..269
+						corners = [3,2,0,1,7,6,4,5] 
+					else
+						corners = [2,0,1,3,6,4,5,7]
+					end
 				else
-					corners = [2,0,1,3,6,4,5,7]
+					comp_rotz = -comp_rotz
+					case comp_rotz
+					when 271..360
+						corners = [0,1,3,2,4,5,7,6]
+					when 181..270
+						corners = [1,3,2,0,5,7,6,4]
+					when 91..180
+						corners = [3,2,0,1,7,6,4,5] 
+					else
+						corners = [2,0,1,3,6,4,5,7]
+					end
 				end
 				return corners
 			end

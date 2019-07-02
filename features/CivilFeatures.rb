@@ -250,6 +250,23 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                 puts "Starting room construction : Time #{Time.now}"
                 create_poly_room
                 puts "Finishing room construction : Time #{Time.now}"
+
+                #puts "Creating floor group"
+                #resp = create_floor_group
+
+            end
+
+            def create_floor_group
+                rface =  @room_face
+                unless rface
+                    puts "Something wrong with the face.Floor face not found."
+                    return false
+                end
+                unless rface.is_a?(Sketchup::Face)
+                    puts "Something wrong with face. The input is not floor face"
+                    return false
+                end
+                RIO::CivilHelper::add_spacetype rface, @room_name
             end
 
             def create_poly_room

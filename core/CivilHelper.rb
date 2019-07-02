@@ -293,6 +293,8 @@ module RIO
                         else
                             if floor_edge.line[1].perpendicular?(last_viewed_wall.line[1])
                                 return view_components
+                            elsif !floor_edge.line[1].parallel?(last_viewed_wall.line[1])
+                                return view_components
                             else
                                 view_components << floor_edge
                             end
@@ -682,6 +684,58 @@ module RIO
             end
         end
 
+        def self.add_text_to_face face, text
+            temp_group 			= Sketchup.active_model.entities.add_group
+            temp_entity_list 	= temp_group.entities
+            text_scale 			= face.bounds.height/50
+            temp_entity_list.add_3d_text(text,  TextAlignCenter, "Arial", false, false, text_scale)
+            text_component 		= temp_group.to_component
+            text_definition 	= text_component.definition
+            text_component.erase!
+    
+            text_inst 			= Sketchup.active_model.entities.add_instance text_definition, Geom::Transformation.new(face.bounds.center)
+            text_inst
+        end
+
+        def self.add_spacetype room_face, room_name
+            begin
+                model			= Sketchup.active_model
+                model.start_operation 'create_floor_group'
+                floor_layer		= model.layers.add 'RIO_Floor_'+room_name
+                wall_height = room_face.get_attribute(:rio_atts, 'wall_height')
+
+                fcolor    			= Sketchup::Color.new "#23d8d4"
+                room_face.material=fcolor
+                room_face.back_material=fcolor
+                
+                prev_active_layer 	= Sketchup.active_model.active_layer.name
+                model.active_layer 	= floor_layer
+                text_inst 			= add_text_to_face room_face, room_name
+                text_inst.set_attribute :rio_atts, 'room_name_text', room_name
+                floor_group 		= model.active_entities.add_group(room_face, text_inst)
+                floor_group.set_attribute :rio_atts, 'room_name', room_name
+                floor_group.set_attribute :rio_atts, 'wall_height', wall_height
+                floor_group.set_attribute :rio_atts, 'floor_face_pid', room_face.persistent_id
+                Sketchup.active_model.active_layer = prev_active_layer
+            rescue Exception=>e 
+                Sketchup.active_model.active_layer = prev_active_layer
+                raise e
+                Sketchup.active_model.abort_operation
+            else
+                Sketchup.active_model.commit_operation
+            end
+        end
+
+        def self.delete_spacetype room_name
+            all_groups = Sketchup.active_model.entities.grep(Sketchup::Group)
+            room_group = all_groups.select{|ent| ent.get_attribute(:rio_atts, 'room_name') == room_name}[0]
+            exploded_entities = room_group.explode
+            room_face = exploded_entities.grep(Sketchup::Face)[0]
+            room_face.attribute_dictionaries.delete('rio_atts')
+
+            text_inst = exploded_entities.grep(Sketchup::ComponentInstance)
+            Sketchup.active_model.entities.erase_entities(text_inst)
+        end
         
         def self.create_single_column (column_edge_arr, 
                                         column_face: nil, 
@@ -954,12 +1008,12 @@ module RIO
                             puts "Hit entity : #{hit_item[1][0]} : #{block_type}"
                             if block_type=="window"
                                 UI.messagebox "Window behind the component"
-                                Sketchup.active_model.entities.erase_entities comp_inst
+                                #Sketchup.active_model.entities.erase_entities comp_inst
                                 sel.add(hit_comp)
                                 return false
                             elsif block_type=="door"
                                 UI.messagebox "Door behind the component."
-                                Sketchup.active_model.entities.erase_entities comp_inst
+                                #Sketchup.active_model.entities.erase_entities comp_inst
                                 sel.add(hit_comp)
                                 return false
                             end
@@ -971,6 +1025,50 @@ module RIO
                 return false
             end
             return true
+        end
+
+        def self.check_room_bounds comp_inst, room_name
+            room_face = get_room_face room_name
+            comp_bounds = comp_inst.bounds
+
+            floor_height    = room_face.local_transformation.origin.z
+            comp_height     = comp_inst.transformation.origin.z
+            if comp_height < floor_height
+                puts "Component cannot go below floor"
+                return false
+            end
+
+            intxn = comp_bounds.intersect(room_face.bounds)
+            if intxn.diagonal > 1.mm
+                puts "Component touches the floor"
+                return true
+            end
+
+            corners = RIO::DirectionHelper::get_component_corners comp_inst
+            down_face_corners = [
+                                    comp_bounds.corner(corners[0]), 
+                                    comp_bounds.corner(corners[1]),
+                                    comp_bounds.corner(corners[2]),
+                                    comp_bounds.corner(corners[3])
+                                ]
+            comp_entities = get_room_comp_entities room_name
+            comp_entities.each {|ent| ent.visible=false}
+
+            bounds_check = true
+            down_face_corners.each {|corner_pt|
+                hit_item = Sketchup.active_model.raytest(corner_pt, Z_AXIS.reverse)
+                if hit_item
+                    if hit_item[1][0]!=room_face
+                        sel.add(hit_item[1][0])
+                        puts "Component not within bounds"
+                        bounds_check = false
+                        break
+                    end
+                end
+            }
+
+            comp_entities.each {|ent| ent.visible=true}
+            return bounds_check
         end
 
         #Check if the component is properly placed
@@ -992,15 +1090,15 @@ module RIO
                         sel.clear
                         entity_type = room_entity.get_attribute(:rio_block_atts, 'block_type')
                         UI.messagebox "Component Overlaps this #{entity_type}"
-                        Sketchup.active_model.entities.erase_entities comp_inst
+                        #Sketchup.active_model.entities.erase_entities comp_inst
                         sel.add(room_entity)
                         return false
                     end
                 end
             }
-
             puts "Not intersecting with any civil components"
-            
+
+            #****************************************************************************            
             if !comp_entities.empty?
                 comp_entities = comp_entities-[comp_inst]
                 puts "comp_entities : #{comp_entities}"
@@ -1023,10 +1121,17 @@ module RIO
 
             puts "Not intersecting with any RIO components"
 
+            #****************************************************************************
             puts "Checking doors and windows...."
             door_window_flag = check_door_windows(comp_inst, room_name)
-            puts "Dors window : #{door_window_flag}"
-            return door_window_flag
+            puts "Doors window : #{door_window_flag}"
+            return door_window_flag unless door_window_flag
+
+            #****************************************************************************
+            puts "Checking room bounds"
+            room_bounds_flag = check_room_bounds comp_inst, room_name
+
+            return room_bounds_flag
         end
         
         #Input a fully created component and location
@@ -1037,7 +1142,7 @@ module RIO
 
             case placement_type
             when 'manual'
-                inst = Sketchup.active_model.entities.place_component comp_defn
+                comp_inst = Sketchup.active_model.entities.place_component comp_defn
             when 'wall'
                 model               = Sketchup.active_model
                 wall_offset_point   = model.get_attribute(:rio_atts, 'wall_offset_pt')
@@ -1064,6 +1169,9 @@ module RIO
 
                 temp_inst       = Sketchup.active_model.active_entities.add_instance comp_defn, ORIGIN
                 move_distance   = temp_inst.bounds.height
+                if wall_trans.rotz%90 != 0
+                    move_distance += 50.mm
+                end
                 comp_width      = temp_inst.bounds.width
                 comp_height     = temp_inst.bounds.depth
                 Sketchup.active_model.entities.erase_entities temp_inst
@@ -1097,6 +1205,12 @@ module RIO
                     puts "Component placed successfully"
                 end
             end
+            Sketchup.active_model.layers.add('RIO_Lib_Comp') if Sketchup.active_model.layers['RIO_Lib_Comp'].nil?
+            if comp_inst && !comp_inst.deleted?
+                comp_inst.layer.name = 'RIO_Lib_Comp'
+                return comp_inst
+            end
+            return false
         end
 
         def self.get_room_face room_name
