@@ -483,6 +483,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                 window_wall_inst_below.set_attribute(:rio_block_atts, 'window_offset', window_offset)
                 window_wall_inst_below.set_attribute(:rio_block_atts, 'room_name', room_name)
                 window_wall_inst_below.set_attribute(:rio_block_atts, 'block_type', 'wall')
+                window_wall_inst_below.set_attribute(:rio_block_atts, 'towards_wall_vector', towards_wall_vector)
 
                 window_wall_inst_above.set_attribute(:rio_block_atts, 'edge_id', window_edge.persistent_id)
                 window_wall_inst_above.set_attribute(:rio_block_atts, 'view_name', view_name)
@@ -493,6 +494,8 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                 window_wall_inst_above.set_attribute(:rio_block_atts, 'window_offset', window_offset)
                 window_wall_inst_above.set_attribute(:rio_block_atts, 'room_name', room_name)
                 window_wall_inst_above.set_attribute(:rio_block_atts, 'block_type', 'wall')
+                window_wall_inst_above.set_attribute(:rio_block_atts, 'towards_wall_vector', towards_wall_vector)
+
                 
                 add_real_window = true
                 if add_real_window

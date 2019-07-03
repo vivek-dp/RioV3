@@ -998,14 +998,14 @@ module RIO
                                 ]
                 back_corners.each{|comp_pt|
                     hit_item = model.raytest(comp_pt, comp_facing_vector.reverse)
-                    puts "hit_item : #{hit_item}"
+                    #puts "hit_item : #{hit_item}"
                     if hit_item 
                         hit_comp = hit_item[1][0]
                         if hit_comp.is_a?(Sketchup::ComponentInstance)
-                            sel.add(hit_comp)
-                            puts "id : #{hit_comp.persistent_id}"
+                            #sel.add(hit_comp)
+                            #puts "id : #{hit_comp.persistent_id}"
                             block_type = hit_comp.get_attribute(:rio_block_atts, 'block_type')
-                            puts "Hit entity : #{hit_item[1][0]} : #{block_type}"
+                            #puts "Hit entity : #{hit_item[1][0]} : #{block_type}"
                             if block_type=="window"
                                 UI.messagebox "Window behind the component"
                                 #Sketchup.active_model.entities.erase_entities comp_inst
@@ -1071,6 +1071,38 @@ module RIO
             return bounds_check
         end
 
+        def self.do_manifold_check entity1, entity2
+            begin
+                puts "do_manifold_check : #{entity1} : #{entity2}"
+                model           = Sketchup.active_model
+                overlap_flag    = false
+                model.start_operation("Manifold check")
+
+                manifold_group1 = SketchupHelper::get_manifold_group(entity1)
+                manifold_group2 = SketchupHelper::get_manifold_group(entity2)
+                total_faces     = manifold_group1.entities.grep(Sketchup::Face).length + manifold_group2.entities.grep(Sketchup::Face).length
+                shell_group     = manifold_group1.outer_shell(manifold_group2)
+                if shell_group
+                    puts "shell_group.entities : #{shell_group.entities.to_a}"
+                    shell_faces     = shell_group.entities.grep(Sketchup::Face).length
+                    if shell_faces != total_faces
+                        sel.add(entity2)
+                        puts "The #{entity2} is overlapping"
+                        overlap_flag = true
+                    end
+                end
+                Sketchup.active_model.abort_operation
+                return overlap_flag
+            rescue Exception=>e 
+                raise e
+                Sketchup.active_model.abort_operation
+                return overlap_flag
+            else
+                Sketchup.active_model.abort_operation
+                return overlap_flag
+            end
+        end
+
         #Check if the component is properly placed
         def self.check_component_placement comp_inst, room_name
             args = method(__method__).parameters.map { |arg| arg[1].to_s }
@@ -1080,22 +1112,36 @@ module RIO
             comp_entities   = get_room_comp_entities(room_name)
 
             comp_bounds = comp_inst.bounds
-            room_entities.each{ |room_entity|
-                intersect_bounds = comp_bounds.intersect(room_entity.bounds)
-                puts "intersect_bounds.diagonal : #{intersect_bounds.diagonal}"
-                if intersect_bounds.diagonal > 0.mm
-                    intersect_volume = intersect_bounds.width * intersect_bounds.depth * intersect_bounds.height
-                    puts "intersect_volume : #{intersect_volume}"
-                    if intersect_volume > 1.mm
-                        sel.clear
-                        entity_type = room_entity.get_attribute(:rio_block_atts, 'block_type')
-                        UI.messagebox "Component Overlaps this #{entity_type}"
-                        #Sketchup.active_model.entities.erase_entities comp_inst
-                        sel.add(room_entity)
-                        return false
+
+            if !room_entities.empty?
+                room_entities.each{ |room_entity|
+                    intersect_bounds = comp_bounds.intersect(room_entity.bounds)
+                    #puts "intersect_bounds.diagonal : #{intersect_bounds.diagonal}"
+                    if intersect_bounds.valid?
+                        slope_flag = true
+                        if slope_flag
+                            wall_overlap_flag = do_manifold_check room_entity, comp_inst
+                            if wall_overlap_flag
+                                entity_type = room_entity.get_attribute(:rio_block_atts, 'block_type')
+                                UI.messagebox "Component Overlaps this #{entity_type}"
+                                Sketchup.active_model.entities.erase_entities comp_inst
+                                return false
+                            end 
+                        else    
+                            intersect_volume = intersect_bounds.width * intersect_bounds.depth * intersect_bounds.height
+                            puts "intersect_volume : #{intersect_volume}"
+                            if intersect_volume > 1.mm
+                                sel.clear
+                                entity_type = room_entity.get_attribute(:rio_block_atts, 'block_type')
+                                UI.messagebox "Component Overlaps this #{entity_type}"
+                                Sketchup.active_model.entities.erase_entities comp_inst
+                                sel.add(room_entity)
+                                return false
+                            end
+                        end
                     end
-                end
-            }
+                }
+            end
             puts "Not intersecting with any civil components"
 
             #****************************************************************************            
@@ -1105,15 +1151,25 @@ module RIO
                 comp_entities.each{ |comp_entity|
                     intersect_bounds = comp_bounds.intersect(comp_entity.bounds)
                     puts "Comp : intersect_bounds.diagonal : #{intersect_bounds.diagonal} : #{comp_entity}"
-                    if intersect_bounds.diagonal > 0.mm
-                        intersect_volume = intersect_bounds.width * intersect_bounds.depth * intersect_bounds.height
-                        puts "intersect_volume : #{intersect_volume}"
-                        if intersect_volume > 1.mm
-                            sel.clear
-                            UI.messagebox "New Component Overlaps the selected component"
-                            Sketchup.active_model.entities.erase_entities comp_inst
-                            sel.add(comp_entity)
-                            return false
+                    if intersect_bounds.valid?
+                        slope_flag = true
+                        if slope_flag
+                            wall_overlap_flag = do_manifold_check comp_entity, comp_inst
+                            if wall_overlap_flag
+                                entity_type = room_entity.get_attribute(:rio_block_atts, 'block_type')
+                                UI.messagebox "Component Overlaps this #{entity_type}"
+                                return false
+                            end 
+                        else
+                            intersect_volume = intersect_bounds.width * intersect_bounds.depth * intersect_bounds.height
+                            puts "intersect_volume : #{intersect_volume}"
+                            if intersect_volume > 1.mm
+                                sel.clear
+                                UI.messagebox "New Component Overlaps the selected component"
+                                Sketchup.active_model.entities.erase_entities comp_inst
+                                sel.add(comp_entity)
+                                return false
+                            end
                         end
                     end
                 }
@@ -1170,7 +1226,7 @@ module RIO
                 temp_inst       = Sketchup.active_model.active_entities.add_instance comp_defn, ORIGIN
                 move_distance   = temp_inst.bounds.height
                 if wall_trans.rotz%90 != 0
-                    move_distance += 50.mm
+                    #move_distance += 50.mm
                 end
                 comp_width      = temp_inst.bounds.width
                 comp_height     = temp_inst.bounds.depth
@@ -1280,6 +1336,17 @@ module RIO
             first_entity = sorted_entities.first
 
             wall_start_point                = first_entity.bounds.corner(start_index)
+            first_defn = first_entity.definition
+            unless first_defn
+                puts "The component definition could not be found."
+                return false
+            end
+            bbox = first_defn.bounds
+            if from_side=='left'
+                wall_start_point    = bbox.corner(0).transform(first_entity.transformation) 
+            else
+                wall_start_point    = bbox.corner(1).transform(first_entity.transformation) 
+            end
             puts first_entity.persistent_id
             puts "att_type : #{first_entity.get_attribute(:rio_block_atts, 'wall_type')}"
             if first_entity.get_attribute(:rio_block_atts, 'wall_type') == 'door_wall'

@@ -87,8 +87,8 @@ module RIO
 
 			unless vector_type
 				if vector.x>0&&vector.y<0 #Reverse of Y axis
-					sort_by_x 		= -1
-					sort_by_y 		= -1
+					sort_by_x 		= 1
+					sort_by_y 		= 1
 					vector_type		= 5
 					corner_index 	= 0
 					start_index		= 2
