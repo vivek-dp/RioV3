@@ -51,6 +51,29 @@ module RIO
 				}
 			end#load_tools
 			
+			
+			
+		end #Class helpers
+		class ModalBox
+			include Singleton
+			def self.no_layer_added
+				dialog_hash = {}
+				dialog_hash[:dialog_title] 	= 'Rio Dev Tools'
+				dialog_hash[:scrollable]	= true
+				dialog_hash[:resizable]		= true
+				dialog_hash[:width]			= 350
+				dialog_hash[:height]		= 150
+				dialog_hash[:min_width]		= 50
+				dialog_hash[:min_height]	= 50
+				dialog_hash[:style]			= @utility_style_dialog
+				dialog_hash[:left]			= 100
+				dialog_hash[:right]			= 100
+				
+				no_layer_added_url		= File.join(RIO_ROOT_PATH, 'tools/html/no_layer_added.html')
+				no_layer_added_dialog 	= UI::HtmlDialog.new(dialog_hash)
+				no_layer_added_dialog.set_url(no_layer_added_url)
+				no_layer_added_dialog.show()
+			end
 		end
 	end #module Utilities
 end#RIO

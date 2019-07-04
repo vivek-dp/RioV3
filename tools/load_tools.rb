@@ -7,7 +7,7 @@ module RIO
 			extension_menu = UI.menu(%q(Extensions))
 			extension_menu.add_item('Rio Dev Tools') {
 				tools_inst = RIO::Tools::UITools.instance
-				tools_inst.load_tools
+				tools_inst.create_dialog_room_addition
 			}
 		end
 		

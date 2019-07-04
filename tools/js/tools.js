@@ -7,7 +7,10 @@ function createParamString(params) {
     str += "@"+params.join("@");
     return str;
 }
-
+function updateRoomNames(){
+    console.log("UpdateRoomNames");
+    window.location.href = 'skp:rioGetRoomNames';
+}
 function jsCreateRoom() {
     console.log("create Room called"+$(this).data.params)
     console.log("serialize "+JSON.stringify($('room_form').serialize));

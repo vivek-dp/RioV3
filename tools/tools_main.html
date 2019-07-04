@@ -64,12 +64,16 @@
 
     
     <script type="text/javascript">
-				$('#colorpalettediv').colorPalettePicker({
-					lines:4,
-					onSelected: function(color){
-						console.log(color);
-					}
-				});
-			</script>
+        $( window ).on( "load", function() {
+            console.log( "window loaded" );
+            updateRoomNames();
+        });
+        // $('#colorpalettediv').colorPalettePicker({
+        //     lines:4,
+        //     onSelected: function(color){
+        //         console.log(color);
+        //     }
+        // });
+    </script>
 	</body>
 </html>
