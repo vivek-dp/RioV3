@@ -203,6 +203,11 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                     return false   
                 end
 
+                puts "Floor face material change"
+                floor_color = Sketchup::Color.names[rand(140)]
+                @room_face.material=floor_color
+                @room_face.back_material=floor_color
+
                 puts "HHH : #{window_height} : #{wall_height} : #{door_height} : #{window_offset}"
                 CivilHelper.add_wall_corner_lines
                 room_views_a = CivilHelper.get_wall_views @room_face
@@ -272,6 +277,10 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
             def create_poly_room
                 Sketchup.active_model.layers.add('RIO_Civil_Wall') if Sketchup.active_model.layers['RIO_Civil_Wall'].nil?
                 room_wall_edges = @room_face.edges.select{|edge| edge.layer.name == 'RIO_Wall'} 
+                room_wall_edges << @room_face.edges.select{|edge| edge.layer.name == 'RIO_Door'}
+                room_wall_edges.flatten!
+                room_wall_edges.uniq!
+                puts "room_wall_edges : #{room_wall_edges}"
                 room_wall_edges.each{ |wall_edge|
                     #next
                     verts = wall_edge.vertices
@@ -284,8 +293,53 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                     end
                     
                     towards_wall_vector = CivilHelper::check_edge_vector wall_edge, @room_face
+                    view_name = wall_edge.get_attribute(:rio_edge_atts, 'view_name')
+                    wheight = @wall_height
 
-                    wall_inst = CivilHelper::place_cuboidal_component(pt1, pt2, comp_height: @wall_height)
+                    if wall_edge.layer.name == 'RIO_Door'
+                        add_real_door = true
+                        if add_real_door
+                            puts "Adding Real Door to the opening"
+                            door_skp = RIO_ROOT_PATH+'/assets/samples/Door.skp'
+                            door_defn = Sketchup.active_model.definitions.load(door_skp)
+        
+                            realdoor_inst 		= Sketchup.active_model.entities.add_instance door_defn, ORIGIN
+                            door_bbox 	= realdoor_inst.bounds
+        
+                            x_factor 	= wall_edge.length / door_bbox.width
+                            y_factor 	= 50.mm / door_bbox.height
+                            z_factor	= @door_height / door_bbox.depth
+        
+                            puts "factors : #{x_factor} : #{y_factor} : #{z_factor}"
+                            realdoor_inst.transform!(Geom::Transformation.scaling(x_factor, y_factor, z_factor))
+                            realdoor_inst.transform!(Geom::Transformation.new(pt1))
+        
+                            extra = 0
+                            #Rotate instance
+                            trans_vector = pt1.vector_to(pt2)
+                            if trans_vector.y < 0
+                                trans_vector.reverse!
+                                extra = Math::PI
+                            end
+                            angle 	= extra + X_AXIS.angle_between(trans_vector)
+                            puts "door angle : #{angle} : #{trans_vector}"
+                            realdoor_inst.transform!(Geom::Transformation.rotation(pt1, Z_AXIS, angle))
+        
+                            realdoor_inst.set_attribute(:rio_block_atts, 'edge_id', wall_edge.persistent_id)
+                            realdoor_inst.set_attribute(:rio_block_atts, 'view_name', view_name)
+                            realdoor_inst.set_attribute(:rio_block_atts, 'wall_block', 'false')
+                            realdoor_inst.set_attribute(:rio_block_atts, 'start_point', pt1)
+                            realdoor_inst.set_attribute(:rio_block_atts, 'end_point', pt2)
+                            realdoor_inst.set_attribute(:rio_block_atts, 'door_height', @door_height)
+                            realdoor_inst.set_attribute(:rio_block_atts, 'room_name', room_name)
+                            realdoor_inst.set_attribute(:rio_block_atts, 'block_type', 'door')
+                        end
+                        pt1.z = @door_height
+                        pt2.z = @door_height
+                        wheight = wheight - @door_height
+                    end
+
+                    wall_inst = CivilHelper::place_cuboidal_component(pt1, pt2, comp_height: wheight)
                     developer_mode = true
                     if developer_mode
                         #wall_inst.material = Sketchup::Color.names[rand(140)]
@@ -293,7 +347,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                     else
                         wall_inst.material = @wall_color
                     end
-                    view_name = wall_edge.get_attribute(:rio_edge_atts, 'view_name')
+                    
 
                     wall_inst.set_attribute(:rio_block_atts, 'block_type', 'wall')
                     wall_inst.set_attribute(:rio_block_atts, 'wall_type', 'normal')
@@ -309,16 +363,16 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                     wall_inst.layer = Sketchup.active_model.layers['RIO_Civil_Wall']
                 }
 
-                door_edges = @room_face.edges.select{|e| e.layer.name == 'RIO_Door'}
-                if door_edges.length > 0
-                    door_edges.each{ |door_edge|
-                        puts "Door : #{door_edge}"
-                        door_edge.set_attribute(:rio_block_atts, 'wall_height', wall_height)
-                        door_edge.set_attribute(:rio_block_atts, 'door_height', door_height)
-                        create_door door_edge, @room_face, door_height, wall_height
-                    }
-                    puts "Room Doors created"
-                end
+                # door_edges = @room_face.edges.select{|e| e.layer.name == 'RIO_Door'}
+                # if door_edges.length > 0
+                #     door_edges.each{ |door_edge|
+                #         puts "Door : #{door_edge}"
+                #         door_edge.set_attribute(:rio_block_atts, 'wall_height', wall_height)
+                #         door_edge.set_attribute(:rio_block_atts, 'door_height', door_height)
+                #         create_door door_edge, @room_face, door_height, wall_height
+                #     }
+                #     puts "Room Doors created"
+                # end
 
                 #------------------------------------------
                 window_edges = @room_face.edges.select{|e| e.layer.name == 'RIO_Window'}
@@ -484,6 +538,8 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                 window_wall_inst_below.set_attribute(:rio_block_atts, 'room_name', room_name)
                 window_wall_inst_below.set_attribute(:rio_block_atts, 'block_type', 'wall')
                 window_wall_inst_below.set_attribute(:rio_block_atts, 'towards_wall_vector', towards_wall_vector)
+                window_wall_inst_below.set_attribute(:rio_block_atts, 'wall_height', wall_height)
+                window_wall_inst_below.set_attribute(:rio_block_atts, 'window_wall_location', 'below')
 
                 window_wall_inst_above.set_attribute(:rio_block_atts, 'edge_id', window_edge.persistent_id)
                 window_wall_inst_above.set_attribute(:rio_block_atts, 'view_name', view_name)
@@ -495,7 +551,8 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                 window_wall_inst_above.set_attribute(:rio_block_atts, 'room_name', room_name)
                 window_wall_inst_above.set_attribute(:rio_block_atts, 'block_type', 'wall')
                 window_wall_inst_above.set_attribute(:rio_block_atts, 'towards_wall_vector', towards_wall_vector)
-
+                window_wall_inst_above.set_attribute(:rio_block_atts, 'wall_height', wall_height)
+                window_wall_inst_above.set_attribute(:rio_block_atts, 'window_wall_location', 'below')
                 
                 add_real_window = true
                 if add_real_window
@@ -571,7 +628,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                             perimeter_window_wall_inst_below.set_attribute(:rio_block_atts, 'window_offset', window_offset)
                             perimeter_window_wall_inst_below.set_attribute(:rio_block_atts, 'room_name', room_name)
                             perimeter_window_wall_inst_below.set_attribute(:rio_block_atts, 'perimeter_wall', 'true')
-                            perimeter_window_wall_inst_below.set_attribute(:rio_block_atts, 'block_type', 'wall')
+                            #perimeter_window_wall_inst_below.set_attribute(:rio_block_atts, 'block_type', 'wall')
 
                             perimeter_window_wall_inst_above.set_attribute(:rio_block_atts, 'edge_id', window_edge.persistent_id)
                             perimeter_window_wall_inst_above.set_attribute(:rio_block_atts, 'view_name', view_name)
@@ -582,7 +639,7 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                             perimeter_window_wall_inst_above.set_attribute(:rio_block_atts, 'window_offset', window_offset)
                             perimeter_window_wall_inst_above.set_attribute(:rio_block_atts, 'room_name', room_name)
                             perimeter_window_wall_inst_above.set_attribute(:rio_block_atts, 'perimeter_wall', 'true')
-                            perimeter_window_wall_inst_above.set_attribute(:rio_block_atts, 'block_type', 'wall')
+                            #perimeter_window_wall_inst_above.set_attribute(:rio_block_atts, 'block_type', 'wall')
                         else
                             puts "One external edge found. But its layer is not window layer"
                         end

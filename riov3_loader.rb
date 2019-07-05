@@ -67,3 +67,7 @@ end
 load_layers
 RIO::DevTools::load_menu_items
 RIO::DevTools::load_utilities
+RIO::DevTools::room_details
+
+
+

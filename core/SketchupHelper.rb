@@ -56,6 +56,22 @@ module RIO
             logger.error "Method failed with " + args.map { |arg| "#{arg} = #{eval arg}" }.join(', ')
         end
 
+        def self.get_corner_points comp_inst
+            defn        = comp_inst.definition
+            inst_trans  = comp_inst.transformation
+
+            actual_bounds   = defn.bounds
+            comp_height     = actual_bounds.corner(4).z
+            
+            pts = []
+            (0..7).each {|index|
+                bound_pt    = actual_bounds.corner(index)    
+                actual_pt   = bound_pt.transform(inst_trans)
+                pts << actual_pt
+            }
+            pts
+        end
+
         #Creates a manifold group based on the component
         def self.get_manifold_group comp_inst
             model = Sketchup.active_model
@@ -78,12 +94,14 @@ module RIO
                 actual_pt   = bound_pt.transform(inst_trans)
                 
                 #puts "Point : #{index} : #{actual_pt}"
-                actual_pt.z=0.mm
+                #actual_pt.z=0.mm
                 pts << actual_pt
             }
             pre_ents = model.entities.to_a
             bottom_face = model.entities.add_face(pts[0], pts[1], pts[3], pts[2])
-            bottom_face.pushpull(-comp_height)
+            puts "comp height : #{comp_height}"
+            bottom_face.reverse! if bottom_face.normal.z < 0
+            bottom_face.pushpull(comp_height, true)
             post_ents = model.entities.to_a
             
             group_ents = post_ents-pre_ents

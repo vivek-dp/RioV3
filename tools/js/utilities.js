@@ -6,7 +6,14 @@ function createParamString(params) {
 }
 
 function createBeam() {
-    window.location.href = 'skp:createBeam@';
+    window.location.href = 'skp:create_beam@';
     //sketchup.rioCreateRoom(10, 22);
 }//Create room 
 
+function addPerimeterWall() {
+    window.location.href = 'skp:add_perimeter_wall';
+}
+
+function removePerimeterWall() {
+    window.location.href = 'skp:remove_perimeter_wall';
+}

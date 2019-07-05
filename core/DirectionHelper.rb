@@ -87,29 +87,57 @@ module RIO
 
 			unless vector_type
 				if vector.x>0&&vector.y<0 #Reverse of Y axis
-					sort_by_x 		= 1
-					sort_by_y 		= 1
 					vector_type		= 5
-					corner_index 	= 0
-					start_index		= 2
+					if direction=='cw'
+						sort_by_x 		= 1
+						sort_by_y 		= 1
+						corner_index 	= 0
+						start_index		= 2
+					else
+						sort_by_x 		= -1
+						sort_by_y 		= -1
+						corner_index 	= 0
+						start_index		= 2
+					end
 				elsif vector.x>0&&vector.y>0
-					sort_by_x 		= 1
-					sort_by_y 		= -1
 					vector_type		= 6
-					corner_index 	= 1
-					start_index		= 0
+					if direction=="cw"
+						sort_by_x 		= -1
+						sort_by_y 		= 1
+						corner_index 	= 1
+						start_index		= 0
+					else
+						sort_by_x 		= 1
+						sort_by_y 		= -1
+						corner_index 	= 1
+						start_index		= 0
+					end
 				elsif vector.x<0&&vector.y>0
-					sort_by_x 		= 1
-					sort_by_y 		= 1
 					vector_type		= 7
-					corner_index 	= 3
-					start_index		= 1
+					if direction=="cw"
+						sort_by_x 		= -1
+						sort_by_y 		= -1
+						corner_index 	= 3
+						start_index		= 1
+					else
+						sort_by_x 		= 1
+						sort_by_y 		= 1
+						corner_index 	= 3
+						start_index		= 1
+					end
 				elsif vector.x<0&&vector.y<0
-					sort_by_x 		= -1
-					sort_by_y 		= 1
 					vector_type		= 8
-					corner_index 	= 2
-					start_index		= 3
+					if direction=="cw"
+						sort_by_x 		= 1
+						sort_by_y 		= -1
+						corner_index 	= 2
+						start_index		= 3
+					else
+						sort_by_x 		= -1
+						sort_by_y 		= 1
+						corner_index 	= 2
+						start_index		= 3
+					end
 				end
 			end
 

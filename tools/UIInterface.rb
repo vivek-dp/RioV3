@@ -24,6 +24,90 @@ module RIO
 				elements_a
 			end
 
+			def check_room_parameters input_h
+				room_name = input_h[0]
+				room_names = RIO::CivilHelper::get_room_names
+				if room_names.include?(room_name)
+					UI.messagebox "Room name already taken. Try something else"
+					return false
+				end
+				return true
+			end
+
+			def door_face_identification input_face
+				model 	= Sketchup.active_model
+				ents	= model.entities
+				input_face_edges = input_face.outer_loop.edges
+				pts = []
+				door_edges = input_face_edges.select{|ent| ent.layer.name == 'RIO_Door'}
+				
+				puts "door_edges : #{door_edges}"
+				door_edges.each { |door_edge|
+					puts "door_edge : #{door_edge}"
+					faces = door_edge.faces
+					door_vertices = door_edge.vertices
+					
+					common_edges = []
+					perpendicular_edges = []
+					input_face_edges.each{ |face_edge|
+						common_edges << face_edge unless (face_edge.vertices&door_vertices).empty?
+					}
+					puts "coomon_edge : #{common_edges}"
+					common_edges.each { |common_edge|
+						perpendicular_edges << common_edge if door_edge.line[1].perpendicular?(common_edge.line[1])
+					}
+					if perpendicular_edges.empty?
+						puts "Something peculiar about this door #{door_edge.persistent_id}"
+						next
+					end
+					perpendicular_edges.sort_by!{|pedge| pedge.length}
+					puts "perpendicular_edges : #{perpendicular_edges}"
+					if perpendicular_edges.length == 2
+						wall_edge = perpendicular_edges[0]
+						if wall_edge.length < 251.mm
+							offset_len 	= wall_edge.length
+						else
+							offset_len = 250.mm
+						end
+						tw_vector 	= RIO::CivilHelper::check_edge_vector door_edge, input_face
+						puts "tw_vector : #{tw_vector}"
+						#face_pts 	= [door_vertices[0].position]
+						#face_pts 	<< door_vertices[0].position.offset(tw_vector, offset_len)
+						#face_pts 	<< door_vertices[1].position.offset(tw_vector, offset_len)
+						#face_pts	<< door_vertices[1].position
+						if tw_vector
+							pt1 = door_vertices[0].position.offset(tw_vector, offset_len)
+							pt2 = door_vertices[1].position.offset(tw_vector, offset_len)
+							pts << [pt1, pt2]
+							
+						end
+						
+						#new_face 	= ents.add_face(face_pts)
+						#new_face.set_attribute(:rio_atts, 'wall_face', 'true')
+					end
+				}
+				
+				unless pts.empty?
+					pre_ents = model.entities.to_a
+					pts.each{|arr|
+						new_line = ents.add_line(arr[0], arr[1])
+						new_line.layer = Sketchup.active_model.layers['RIO_Door']
+						new_line.set_attribute(:rio_edge_atts, 'new_edge', 'true')
+					}
+					post_ents = model.entities.to_a
+					new_ents = post_ents - pre_ents
+					new_faces = new_ents.grep(Sketchup::Face)
+					puts "new_faces : #{new_faces}"
+					unless new_faces.empty?
+						new_faces.sort_by!{|ent| -ent.area}
+						sel.clear
+						sel.add(new_faces[0])
+					end
+				end
+				
+				return true
+			end
+
 			def create_room elements_a
 				room_name 		= elements_a[0]
 				wall_height 	= elements_a[1].to_f.mm
@@ -31,15 +115,27 @@ module RIO
 				window_height	= elements_a[3].to_f.mm
 				window_offset	= elements_a[4].to_f.mm 
 
-				ob = RIO::CivilMod::PolyRoom.new(  :room_name=>room_name,
-					:wall_height=>wall_height, 
-					:door_height=>door_height,
-					:window_height=>window_height, 
-					:window_offset=>window_offset)
+				resp_flag = check_room_parameters(elements_a)
+				puts "Room parameters check : #{resp_flag}"
+				if resp_flag
+					room_face = Sketchup.active_model.selection[0]
+					resp = door_face_identification room_face
+
+					puts "Doors identified #{resp}"
+					if resp
+						ob = RIO::CivilMod::PolyRoom.new(  :room_name=>room_name,
+							:wall_height=>wall_height, 
+							:door_height=>door_height,
+							:window_height=>window_height, 
+							:window_offset=>window_offset)
+					end
+				end
 			end
 
 			def get_room_names
-				
+				room_names = ["room 1", "room 2", "room 3"]
+				js_command = "updateRoomNames("+ message.to_s + ")"
+				@dialog.execute_script(js_command)
 			end
 
 			def check_room_face room_face
@@ -97,9 +193,11 @@ module RIO
 					@@rio_dialog.add_action_callback("rioCreateRoom"){|dialog, params|
 						puts "Inside UI..   #{dialog} -- #{params}"
 						elements_a = get_params_from_string params
+						puts "elements_a : #{elements_a}"
 						create_room(elements_a)
 					}
 					@@rio_dialog.add_action_callback("rioRemoveRoomComponents") {|dialog, params|
+						puts "UIInt : rioRemoveRoomComponents"
 						RIO::CivilHelper.remove_room_entities(params)
 					}
 					@@rio_dialog.show()
@@ -189,7 +287,14 @@ module RIO
 							rio_tools_inst.create_dialog_room_addition
 						end
 					 }
-					rbm.add_item("Column") {} 
+					rbm.add_item("Column") {
+						comp_inst = RIO::CivilHelper::create_single_column selected_entity.outer_loop.edges, column_face: selected_entity
+						if comp_inst 
+							puts "Column created successfully"
+						else
+							puts "Column creation issue"
+						end
+					} 
 				else
 					rbm.add_item("Beam") { RIO::CivilHelper.create_beam(selected_entity) }
 				end

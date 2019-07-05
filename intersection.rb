@@ -74,6 +74,7 @@ def check_overlap entity1, entity2
 	if outer_bounds_intersect_flag
 		puts "Outer bounds intersect : #{entity1} : #{entity2}"
 		puts "Checking inner bounds intersection"
+		
 		$entity_faces 	= []
 		entity1_copy 	= entity1.copy
 		explode_to_face(entity1_copy)
@@ -101,6 +102,47 @@ def check_overlap entity1, entity2
 end 
 
 
+ents = sel
+sel.clear
+ents.each{|ed| 
+	if ed.is_a?(Sketchup::Edge)
+		puts ed.faces.length 
+		sel.add(ed) if ed.faces.length != 2
+	elsif ed.is_a?(Sketchup::Face)
+		edges = ed.faces
+		edges.each{ |ent|
+			sel.add(ent) if ent.faces.length != 2
+		}
+	end
+}
 
+
+ents = sel.to_a
+sel.clear
+ents.each{|ed| 
+	if ed.is_a?(Sketchup::Edge)
+		puts ed.faces.length, ed
+		sel.add(ed) if ed.faces.length != 2
+	elsif ed.is_a?(Sketchup::Face)
+		edges = ed.faces
+		edges.each{ |ent|
+			if ent.faces.length == 2
+			    puts ent
+			    sel.add(ent) 
+			end
+		}
+	end
+}
+
+defn_name 	= 't1'
+model		= Sketchup.active_model
+entities 	= model.entities
+defns		= model.definitions
+comp_defn	= defns.add defn_name
+
+wall_temp_group 	= comp_defn.entities.add_group
+fsel.each { |ent|
+	wall_temp_group.entities.add_face(ent)
+}
 
 

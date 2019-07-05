@@ -18,5 +18,13 @@ module RIO
 				tools_inst.load_tools
 			}
 		end
+
+		def self.room_details
+			extension_menu = UI.menu(%q(Extensions))
+			extension_menu.add_item('Room Details') {
+				tools_inst = RIO::Utilities::DeleteRooms.instance
+				tools_inst.room_details
+			}
+		end
 	end
 end

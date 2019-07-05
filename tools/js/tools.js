@@ -9,7 +9,7 @@ function createParamString(params) {
 }
 function updateRoomNames(){
     console.log("UpdateRoomNames");
-    window.location.href = 'skp:rioGetRoomNames';
+    window.location.href='skp:rioGetRoomNames';
 }
 function jsCreateRoom() {
     console.log("create Room called"+$(this).data.params)
@@ -35,5 +35,33 @@ function jsCreateRoom() {
 function jsDeleteRoomComponents() {
 	room_name = JSON.stringify(document.getElementById("CR_room_name").value);
     console.log("Deleting room components : "+room_name.toString())
-	window.location.href = 'skp:rioRemoveRoomComponents@'+parseString(room_name);
+    window.location.href = 'skp:rioRemoveRoomComponents@'+parseString(room_name);
+}
+
+function multiDeleteRooms() {
+    var selectedValues=[];
+    $("#room-name-list :selected").each(function(){
+        selectedValues.push($(this).val()); 
+    });
+    console.log(selectedValues);
+    window.location.href = 'skp:rioDeleteMultiRoom@'+selectedValues;
+    //$("#room-name-list").empty();
+    //updateRoomNames();
+}
+
+function passRoomNames(roomNames) {
+    console.log("roomNames.."+roomNames);
+	$("#room-name-list").empty();
+    var roomList = document.getElementById("room-name-list");
+	console.log("roomName ..."+roomNames[0]);
+	//var roomNamesArray = roomNames.split(",");
+	//roomList.empty();
+	for (i = 0; i < roomNames.length; i++)
+	{
+		console.log("Room Name : "+roomNames[i])
+		var optn = document.createElement("OPTION");
+		optn.text = roomNames[i];
+		optn.value = roomNames[i];
+		roomList.options.add(optn);
+	}
 }

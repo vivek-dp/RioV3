@@ -3,10 +3,10 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 	<head runat="server">
 		<title>Utilties</title>
-		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
-		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.min.css">
+		<link rel="stylesheet" href="css/font-awesome.min.css">
+		<link rel="stylesheet" src="css/semantic.min.css">
 		
-		<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.js"></script>
+		<script type="text/javascript" src="js/jquery.js"></script>
 		<script type="text/javascript" src="js/utilities.js"></script>
 
 	</head>
@@ -24,6 +24,18 @@
 						<button class="ui massive labeled icon button" id="UT_Create_Beam" onclick="createBeam()">
 						  <i class="building icon"></i>
 						  Create beam
+						</button>
+					</div>
+					<div class="field">
+						<button class="ui massive labeled icon button" id="UT_Add_Perimeter" onclick="addPerimeterWall()">
+						  <i class="external alternate icon"></i>
+						  Add Exterior wall
+						</button>
+					</div>
+					<div class="field">
+						<button class="ui massive labeled icon button" id="UT_Remove_Perimeter" onclick="removePerimeterWall()">
+						  <i class="external square alternate icon"></i>
+						  Remove Exterior wall
 						</button>
 					</div>
 				</div>
