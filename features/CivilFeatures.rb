@@ -203,14 +203,13 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                     return false   
                 end
 
-                puts "Floor face material change"
-                floor_color = Sketchup::Color.names[rand(140)]
-                @room_face.material=floor_color
-                @room_face.back_material=floor_color
+                
 
                 puts "HHH : #{window_height} : #{wall_height} : #{door_height} : #{window_offset}"
                 CivilHelper.add_wall_corner_lines
                 room_views_a = CivilHelper.get_wall_views @room_face
+                
+                return false unless room_views_a
 
                 count = 0
                 room_views_a.each do |edge_arr|
@@ -223,6 +222,14 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                     }
                 end
                 construct_poly_room
+
+                puts "Floor face material change"
+                floor_color = Sketchup::Color.names[rand(140)]
+                @room_face.material=floor_color
+                @room_face.back_material=floor_color
+                
+                RIO::CivilHelper::add_text_to_face @room_face, @room_name
+                
             end
             
             def construct_poly_room
@@ -526,6 +533,10 @@ wall_obj = RIO::CivilMod::RoomWall.new(:wall_edge=>fsel,
                 view_name = window_edge.get_attribute(:rio_edge_atts, 'view_name')
                 room_name = view_name.split('_V_')[0]
                 towards_wall_vector = CivilHelper::check_edge_vector window_edge, @room_face
+
+                window_wall_color = window_edge.get_attribute(:rio_edge_atts, 'view_color')
+                window_wall_inst_below.material = window_wall_color
+                window_wall_inst_above.material = window_wall_color
 
                 #Setting attributes for the wall components
                 window_wall_inst_below.set_attribute(:rio_block_atts, 'edge_id', window_edge.persistent_id)

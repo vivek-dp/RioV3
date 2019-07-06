@@ -72,8 +72,42 @@ module RIO
             pts
         end
 
+        def self.get_comp_raytest_points comp_inst
+            defn        = comp_inst.definition
+            inst_trans  = comp_inst.transformation
+        
+            actual_bounds   = defn.bounds
+            comp_height     = actual_bounds.corner(4).z
+        
+            pts = []
+            #For raytest we are going to add extra distance for the components
+            #Beacause when the bounds check the raytest hits the corner wall for corner component 
+            (0..3).each { |index|
+                bound_pt    = actual_bounds.corner(index)
+                case index
+                when 0
+                    bound_pt.x += 2.mm
+                    bound_pt.y += 2.mm
+                when 1
+                    bound_pt.x -= 2.mm
+                    bound_pt.y += 2.mm
+                when 2
+                    bound_pt.x += 2.mm
+                    bound_pt.y -= 2.mm
+                when 3
+                    bound_pt.x -= 2.mm
+                    bound_pt.y -= 2.mm
+                end
+                actual_pt   = bound_pt.transform(inst_trans)
+                pts << actual_pt
+                #es.add_cline(actual_pt, Z_AXIS)
+            }
+            
+            pts
+        end
+
         #Creates a manifold group based on the component
-        def self.get_manifold_group comp_inst
+        def self.get_manifold_group comp_inst, z_offset=0.mm    
             model = Sketchup.active_model
             
             defn        = comp_inst.definition
@@ -92,7 +126,9 @@ module RIO
             (0..7).each {|index|
                 bound_pt    = actual_bounds.corner(index)    
                 actual_pt   = bound_pt.transform(inst_trans)
-                
+
+                actual_pt.z += z_offset
+
                 #puts "Point : #{index} : #{actual_pt}"
                 #actual_pt.z=0.mm
                 pts << actual_pt

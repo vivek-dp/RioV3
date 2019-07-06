@@ -27,6 +27,9 @@ def dload
         load file_name
 		puts "Loading #{file_name}"
     }
+end
+
+def uload 
 	ruby_files = Dir.glob(RIO_ROOT_PATH+'tools/*.rb')
     ruby_files.each { |file_name|
         load file_name

@@ -151,7 +151,7 @@ module RIO
 				return false
 			end
 			
-			allowed_ents = ['wall', 'beam', 'column']
+			allowed_ents = ['wall', 'column']
 			entities.select!{|ent| allowed_ents.include?(ent.get_attribute(:rio_block_atts, 'block_type'))}
 
 			direction=(wall_side=="left") ? "cw":"acw"

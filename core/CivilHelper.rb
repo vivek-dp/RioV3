@@ -248,7 +248,15 @@ module RIO
             unless unknown_edges.empty?
                 seln = Sketchup.active_model.selection; seln.clear; seln.add(unknown_edges)
                 puts "The following are unknown edges in the floor."
-                return false
+                resp = UI.messagebox("The selections are unknown edges in the room. Click Ok to add them to Walls or Cancel to choose their layers manually.", MB_OKCANCEL)
+                case resp
+                when 1
+                    unknown_edges.each{ |uedge|
+                        uedge.layer = Sketchup.active_model.layers['RIO_Wall']
+                    }
+                when 2
+                    return false
+                end
             end
 
 
@@ -346,15 +354,22 @@ module RIO
         end
 
         def self.create_beam input_face
-
+            puts "create_beam : #{input_face}"
             wall_blocks = es.grep(Sketchup::ComponentInstance).select{|inst| inst.definition.name.start_with?('rio_temp_defn')}
+            
+            intersecting_blocks = []
             beam_wall_block = nil
             wall_blocks.each{|wblock|
-                if wblock.bounds.intersect(input_face.bounds).diagonal > 1.mm
+                if wblock.bounds.intersect(input_face.bounds).width > 10.mm
                     beam_wall_block = wblock
                     break
                 end
             }
+            # puts "intersecting_blocks : #{intersecting_blocks}"
+            # intersecting_blocks.sort_by{|iblock| iblock.bounds.intersect(input_face.bounds).diagonal.to_f}
+            # puts "intersecting_blocks2 : #{intersecting_blocks}"
+            # beam_wall_block = intersecting_blocks.last
+
             unless beam_wall_block
                 face_cent_pt = input_face.bounds.center
                 test1_pt, test1_item = Sketchup.active_model.raytest(face_cent_pt, input_face.normal)
@@ -488,6 +503,7 @@ module RIO
 
                     pre_entities = Sketchup.active_model.entities.to_a
                     input_face.pushpull(beam_length, true)
+                    Sketchup.active_model.entities.erase_entities(input_face)
                     post_entities = Sketchup.active_model.entities.to_a
                     new_entities 	= post_entities - pre_entities
                     temp_group 		= Sketchup.active_model.entities.add_group(new_entities)
@@ -497,7 +513,7 @@ module RIO
                     
                     beam_component.set_attribute(:rio_block_atts, 'block_type', 'beam')
                     beam_component.set_attribute(:rio_block_atts, 'view_name', view_name)
-                    beam_component.set_attribute(:rio_block_atts, 'face_id', input_face.persistent_id)
+                    #beam_component.set_attribute(:rio_block_atts, 'face_id', input_face.persistent_id)
                     beam_component.set_attribute(:rio_block_atts, 'room_name', room_name)
                     beam_component.set_attribute(:rio_block_atts, 'beam_length', beam_length)
                     beam_component.set_attribute(:rio_block_atts, 'start_block', start_block_id)
@@ -617,11 +633,20 @@ module RIO
 
             if room_face
                 new_edges = room_face.outer_loop.edges.each { |fedge|
+                    next unless fedge
+                    next if fedge.deleted?
                     if fedge.get_attribute(:rio_edge_atts, 'new_edge')
                         Sketchup.active_model.entities.erase_entities(fedge)
                     end
                 }
             end
+
+            Sketchup.active_model.entities.grep(Sketchup::ComponentInstance).each{|cinst|
+                if cinst.get_attribute(:rio_atts, 'room_name_text') == room_name
+                    Sketchup.active_model.entities.erase_entities(cinst)
+                    break
+                end
+            }
 
             return true
         end
@@ -758,6 +783,7 @@ module RIO
             text_component.erase!
     
             text_inst 			= Sketchup.active_model.entities.add_instance text_definition, Geom::Transformation.new(face.bounds.center)
+            text_inst.set_attribute(:rio_atts, 'room_name_text', text)
             text_inst
         end
 
@@ -831,7 +857,6 @@ module RIO
                 if room_face
                     puts "Room Face is : #{room_face}"
                     wall_height = room_face.get_attribute(:rio_atts, 'wall_height')
-                    
                     manual_draw = true
                 else
                     puts "The room face could not be found"
@@ -968,13 +993,14 @@ module RIO
                 new_face = Sketchup.active_model.entities.add_face(offset_pts)
                 #puts "new_face normal : #{new_face.normal}"
                 new_face.reverse! if new_face.normal.z < 0
-                new_face.pushpull(-(wall_height-1.mm), false)
+                pushpull_height = wall_height-(0.1.mm)
+                new_face.pushpull(-pushpull_height, false)
                 puts "changing pushpull"
                 curr_ents = Sketchup.active_model.entities.to_a
                 #puts "new_face normal after: #{new_face.normal}"
                 new_ents = curr_ents - prev_ents
-                #new_ents = new_ents - [new_face]
-                #Sketchup.active_model.entities.erase_entities(new_face)
+                new_ents = new_ents - [new_face]
+                Sketchup.active_model.entities.erase_entities(new_face)
                 column_group = Sketchup.active_model.entities.add_group(new_ents)
                 column_group.layer = Sketchup.active_model.layers['RIO_Civil_Column']
                 comp_inst = column_group.to_component
@@ -1100,6 +1126,7 @@ module RIO
 
             floor_height    = room_face.local_transformation.origin.z
             comp_height     = comp_inst.transformation.origin.z
+            puts "room_face : #{room_face}"
             if comp_height < floor_height
                 puts "Component cannot go below floor"
                 return false
@@ -1124,22 +1151,17 @@ module RIO
             #                         comp_bounds.corner(corners[2]),
             #                         comp_bounds.corner(corners[3])
             #                     ]
-            corner_pts = RIO::SketchupHelper::get_corner_points comp_inst
-
-            down_face_corners = [
-                                    corner_pts[0],
-                                    corner_pts[1],
-                                    corner_pts[3],
-                                    corner_pts[2]
-                                ]
+            raytest_pts = RIO::SketchupHelper::get_comp_raytest_points comp_inst
 
             bounds_check = true
-            down_face_corners.each {|corner_pt|
+            raytest_pts.each {|corner_pt|
                 hit_item = Sketchup.active_model.raytest(corner_pt, Z_AXIS.reverse)
                 if hit_item
                     if hit_item[1][0]!=room_face
-                        sel.add(hit_item[1][0])
-                        UI.messagebox "Component not within bounds : #{hit_item[1][0]}"
+                        #sel.add(hit_item[1][0])
+                        sel.clear
+                        sel.add(room_face)
+                        UI.messagebox "Component not within bounds : #{hit_item[1][0].persistent_id} : #{room_face.persistent_id}"
                         Sketchup.active_model.entities.erase_entities(comp_inst)
                         bounds_check = false
                         break
@@ -1147,8 +1169,12 @@ module RIO
                 end
             }
 
-            comp_entities.each {|ent| ent.visible=true}
-            civil_entities.each {|ent| ent.visible=true}
+            comp_entities.each {|ent| 
+                ent.visible=true if ent && !ent.deleted?
+            }
+            civil_entities.each {|ent| 
+                ent.visible=true if ent && !ent.deleted?
+            }
             return bounds_check
         end
 
@@ -1158,15 +1184,21 @@ module RIO
                 model           = Sketchup.active_model
                 overlap_flag    = false
                 model.start_operation("Manifold check")
-
-                manifold_group1 = SketchupHelper::get_manifold_group(entity1)
-                manifold_group2 = SketchupHelper::get_manifold_group(entity2)
+                continue_flag = false
+                if entity1.is_a?(Sketchup::ComponentInstance) && entity2.is_a?(Sketchup::ComponentInstance)
+                    continue_flag = true
+                end
+                return false unless continue_flag
+                z_offset_for_test = 20000.mm
+                manifold_group1 = SketchupHelper::get_manifold_group(entity1, z_offset_for_test)
+                manifold_group2 = SketchupHelper::get_manifold_group(entity2, z_offset_for_test)
                 algorithm_flag = 1
                 case algorithm_flag
                 when 1
                     comp1   = manifold_group1.to_component
                     comp2   = manifold_group2.to_component
                     intxn   = comp1.intersect(comp2)
+                    puts "intxn : #{intxn} : #{intxn.volume}" if intxn
                     if intxn && intxn.volume > 1
                         sel.add(entity2)
                         overlap_flag = true
@@ -1209,6 +1241,7 @@ module RIO
 
             if !room_entities.empty?
                 room_entities.each{ |room_entity|
+                    next if room_entity.deleted?
                     intersect_bounds = comp_bounds.intersect(room_entity.bounds)
                     #puts "intersect_bounds.diagonal : #{intersect_bounds.diagonal}"
                     if intersect_bounds.valid?
@@ -1219,9 +1252,11 @@ module RIO
                             wall_overlap_flag = do_manifold_check room_entity, comp_inst
                             room_face.visible = true
                             if wall_overlap_flag
+                                sel.clear
                                 entity_type = room_entity.get_attribute(:rio_block_atts, 'block_type')
-                                resp = UI.messagebox "Component Overlaps this.. #{entity_type}. Removing Component"
+                                resp = UI.messagebox "Component Overlaps #{entity_type}. Removing Component"
                                 Sketchup.active_model.entities.erase_entities comp_inst
+                                sel.add(room_entity)
                                 return false
                             end 
                         else    
@@ -1239,7 +1274,7 @@ module RIO
                     end
                 }
             end
-            puts "Not intersecting with any civil components"
+            puts "Not intersecting with any civil components------------------------------"
 
             #****************************************************************************            
             if !comp_entities.empty?
@@ -1273,7 +1308,7 @@ module RIO
                 }
             end
 
-            puts "Not intersecting with any RIO components"
+            puts "Not intersecting with any RIO components-------------------------------"
 
             #****************************************************************************
             puts "Checking doors and windows...."
@@ -1323,7 +1358,7 @@ module RIO
                 puts "Wall offset point : #{wall_offset_point} : #{wall_trans}"
                 #comp_inst = Sketchup.active_model.active_entities.add_instance(comp_defn, wall_trans)
 
-                extra_distance  = 0.1.mm
+                extra_distance  = 0.mm
                 temp_inst       = Sketchup.active_model.active_entities.add_instance comp_defn, ORIGIN
                 move_distance   = temp_inst.bounds.height+extra_distance
                 if wall_trans.rotz%90 != 0
@@ -1373,7 +1408,7 @@ module RIO
 
         def self.get_room_face room_name
             all_faces = Sketchup.active_model.entities.select{|ent| ent.is_a?(Sketchup::Face)}
-            room_face = all_faces.select{|face_ent| face_ent.get_attribute(:rio_atts, 'room_name')==room_name}.sort_by!{|fc| fc.area}.first
+            room_face = all_faces.select{|face_ent| face_ent.get_attribute(:rio_atts, 'room_name')==room_name}.sort_by!{|fc| -fc.area}.first
             room_face
         end
 
